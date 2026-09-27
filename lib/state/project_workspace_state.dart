@@ -50,6 +50,31 @@ enum DocStatus {
   error,
 }
 
+/// One entry in the project's root level, which is a single ordered sequence
+/// that interleaves folders and root-level documents (Req v3: a document may
+/// sit above, below, or between folders). Exactly one of [folder] / [document]
+/// is non-null. [position] is the item's slot in that shared root ordering.
+class RootItem {
+  /// The folder, when this item is a folder; otherwise null.
+  final Folder? folder;
+
+  /// The root-level document, when this item is a document; otherwise null.
+  final Document? document;
+
+  const RootItem.folder(Folder this.folder) : document = null;
+  const RootItem.document(Document this.document) : folder = null;
+
+  /// Whether this root item is a folder.
+  bool get isFolder => folder != null;
+
+  /// The item's position in the shared root ordering.
+  int get position => folder?.position ?? document!.position;
+
+  /// A stable identity for keys / equality (folder and document ids never
+  /// collide — both are UUIDs).
+  String get id => folder?.id ?? document!.id;
+}
+
 /// The single source of truth the Project_Sidebar and Editor observe while a
 /// project is open. Owns the open project's ordered folders and per-container
 /// documents, the Active_Document, folder expand/collapse state, editor status,
@@ -167,6 +192,28 @@ class ProjectWorkspaceState extends ChangeNotifier {
     return List<Document>.of(rootDocs)..sort(compareDocuments);
   }
 
+  /// The project's root level as a single ordered sequence interleaving folders
+  /// and root-level documents, sorted by their shared `position` (Req v3). This
+  /// lets a document sit above, below, or between folders. Folders and
+  /// root-documents whose positions tie fall back to folders-first then the
+  /// per-entity comparators for a stable order.
+  List<RootItem> rootItems() {
+    final List<RootItem> items = <RootItem>[
+      for (final Folder f in _folders) RootItem.folder(f),
+      for (final Document d in _documents.where((Document d) => d.folderId == null))
+        RootItem.document(d),
+    ];
+    items.sort((RootItem a, RootItem b) {
+      final int byPos = a.position.compareTo(b.position);
+      if (byPos != 0) return byPos;
+      // Stable tie-break: folders before documents, then per-entity order.
+      if (a.isFolder != b.isFolder) return a.isFolder ? -1 : 1;
+      if (a.isFolder) return compareFolders(a.folder!, b.folder!);
+      return compareDocuments(a.document!, b.document!);
+    });
+    return items;
+  }
+
   /// The documents contained in [folderId] in the shared [compareDocuments]
   /// order (Req 6.3).
   List<Document> documentsIn(String folderId) {
@@ -174,6 +221,323 @@ class ProjectWorkspaceState extends ChangeNotifier {
         .where((Document d) => d.folderId == folderId)
         .toList(growable: false);
     return List<Document>.of(inFolder)..sort(compareDocuments);
+  }
+
+  /// **All** documents of the open project across every container (root-level
+  /// documents plus documents in any folder) in the shared [compareDocuments]
+  /// order. Returned as a fresh list so callers (e.g. the export dialog) cannot
+  /// mutate the backing store. Each document already carries its full title and
+  /// Markdown content from [loadContents], so no extra repository call is
+  /// needed to export.
+  List<Document> allDocuments() {
+    return List<Document>.of(_documents)..sort(compareDocuments);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Drag-and-drop reordering & moving (persisted via `position`).
+  //
+  // Each method computes the affected container's ordered list, applies the
+  // move, reassigns sequential positions (0..n-1) so the stored order is dense
+  // and unambiguous, persists them transactionally via `updatePositions`, and
+  // updates the in-memory documents/folders before notifying. On a repository
+  // failure the in-memory lists are left untouched and a transient error is
+  // surfaced.
+  // ---------------------------------------------------------------------------
+
+  /// Reorders the project's **root level** — the single interleaved sequence of
+  /// folders and root-level documents from [rootItems] — moving the item at
+  /// [oldIndex] to [newIndex] (Req v3). Positions are reassigned densely across
+  /// both folders and documents so they share one ordering, and both kinds are
+  /// persisted transactionally. A no-op move does nothing.
+  Future<void> reorderRootItems(int oldIndex, int newIndex) async {
+    final List<RootItem> ordered = rootItems();
+    if (oldIndex < 0 || oldIndex >= ordered.length) return;
+    final int target = _normalizeReorderIndex(oldIndex, newIndex, ordered.length);
+    if (target == oldIndex) return;
+
+    final RootItem moved = ordered.removeAt(oldIndex);
+    ordered.insert(target, moved);
+
+    // Reassign dense positions across the merged list, splitting into folder
+    // and document updates.
+    final List<Folder> folderUpdates = <Folder>[];
+    final List<Document> docUpdates = <Document>[];
+    for (int i = 0; i < ordered.length; i++) {
+      final RootItem item = ordered[i];
+      if (item.isFolder) {
+        folderUpdates.add(item.folder!.copyWith(position: i));
+      } else {
+        docUpdates.add(item.document!.copyWith(position: i));
+      }
+    }
+
+    try {
+      if (folderUpdates.isNotEmpty) {
+        await _folderRepo.updatePositions(folderUpdates);
+      }
+      if (docUpdates.isNotEmpty) {
+        await _documentRepo.updatePositions(docUpdates);
+      }
+      // Merge updates back into the in-memory lists.
+      if (folderUpdates.isNotEmpty) {
+        final Map<String, Folder> byId = <String, Folder>{
+          for (final Folder f in _folders) f.id: f,
+        };
+        for (final Folder f in folderUpdates) {
+          byId[f.id] = f;
+        }
+        _folders = _sortedFolders(byId.values.toList());
+      }
+      if (docUpdates.isNotEmpty) {
+        final Map<String, Document> byId = <String, Document>{
+          for (final Document d in _documents) d.id: d,
+        };
+        for (final Document d in docUpdates) {
+          byId[d.id] = d;
+        }
+        _documents = _sortedDocuments(byId.values.toList());
+        if (_activeDocument != null && byId.containsKey(_activeDocument!.id)) {
+          _activeDocument = byId[_activeDocument!.id];
+        }
+      }
+      _transientError = null;
+    } catch (_) {
+      _transientError = 'Could not save the new order.';
+    } finally {
+      notifyListeners();
+    }
+  }
+
+  /// Reorders the documents inside [folderId]: moves the document at [oldIndex]
+  /// to [newIndex] within that folder's [documentsIn] ordering.
+  Future<void> reorderDocumentsInFolder(
+    String folderId,
+    int oldIndex,
+    int newIndex,
+  ) async {
+    await _reorderDocumentsInContainer(folderId, oldIndex, newIndex);
+  }
+
+  /// Shared reorder for a single container ([containerFolderId] == null for the
+  /// project root, otherwise a folder id).
+  Future<void> _reorderDocumentsInContainer(
+    String? containerFolderId,
+    int oldIndex,
+    int newIndex,
+  ) async {
+    final List<Document> ordered = _documents
+        .where((Document d) => d.folderId == containerFolderId)
+        .toList()
+      ..sort(compareDocuments);
+
+    final int target = _normalizeReorderIndex(oldIndex, newIndex, ordered.length);
+    if (oldIndex < 0 || oldIndex >= ordered.length) return;
+    if (target == oldIndex) return;
+
+    final Document moved = ordered.removeAt(oldIndex);
+    ordered.insert(target, moved);
+
+    final List<Document> renumbered = <Document>[
+      for (int i = 0; i < ordered.length; i++) ordered[i].copyWith(position: i),
+    ];
+
+    await _persistDocumentChanges(renumbered);
+  }
+
+  /// Moves the document [docId] into [targetFolderId] (null == project root) at
+  /// [targetIndex] within that container.
+  ///
+  /// - Into a folder: the document is re-homed and the folder's documents are
+  ///   reindexed 0..n-1.
+  /// - To the project root: the document joins the interleaved root sequence
+  ///   (folders + root documents) at [targetIndex], and that whole sequence is
+  ///   reindexed so the moved document shares one ordering with the folders
+  ///   (Req v3).
+  ///
+  /// When the document is already in the target container this behaves like a
+  /// reorder.
+  Future<void> moveDocument(
+    String docId,
+    String? targetFolderId,
+    int targetIndex,
+  ) async {
+    final int srcIndex = _documents.indexWhere((Document d) => d.id == docId);
+    if (srcIndex == -1) return;
+    final Document doc = _documents[srcIndex];
+
+    if (targetFolderId != null) {
+      // --- Move into a folder: reindex that folder's documents. ------------
+      final List<Document> dest = _documents
+          .where((Document d) => d.folderId == targetFolderId && d.id != docId)
+          .toList()
+        ..sort(compareDocuments);
+      final int clampedIndex = targetIndex < 0
+          ? 0
+          : (targetIndex > dest.length ? dest.length : targetIndex);
+      dest.insert(clampedIndex, doc.copyWith(folderId: targetFolderId));
+      final List<Document> renumbered = <Document>[
+        for (int i = 0; i < dest.length; i++) dest[i].copyWith(position: i),
+      ];
+      if (!_expandedFolderIds.contains(targetFolderId)) {
+        _expandedFolderIds.add(targetFolderId);
+      }
+      await _persistDocumentChanges(renumbered, activeSync: docId);
+      return;
+    }
+
+    // --- Move to the project root: splice into the interleaved root order. --
+    final List<RootItem> root = rootItems()
+        .where((RootItem it) => it.id != docId)
+        .toList();
+    final int clampedIndex = targetIndex < 0
+        ? 0
+        : (targetIndex > root.length ? root.length : targetIndex);
+    root.insert(clampedIndex, RootItem.document(doc.copyWith(moveToRoot: true)));
+
+    final List<Folder> folderUpdates = <Folder>[];
+    final List<Document> docUpdates = <Document>[];
+    for (int i = 0; i < root.length; i++) {
+      final RootItem item = root[i];
+      if (item.isFolder) {
+        folderUpdates.add(item.folder!.copyWith(position: i));
+      } else {
+        docUpdates.add(item.document!.copyWith(position: i));
+      }
+    }
+
+    try {
+      if (folderUpdates.isNotEmpty) {
+        await _folderRepo.updatePositions(folderUpdates);
+      }
+      if (docUpdates.isNotEmpty) {
+        await _documentRepo.updatePositions(docUpdates);
+      }
+      if (folderUpdates.isNotEmpty) {
+        final Map<String, Folder> byId = <String, Folder>{
+          for (final Folder f in _folders) f.id: f,
+        };
+        for (final Folder f in folderUpdates) {
+          byId[f.id] = f;
+        }
+        _folders = _sortedFolders(byId.values.toList());
+      }
+      final Map<String, Document> byDoc = <String, Document>{
+        for (final Document d in _documents) d.id: d,
+      };
+      for (final Document d in docUpdates) {
+        byDoc[d.id] = d;
+      }
+      _documents = _sortedDocuments(byDoc.values.toList());
+      if (_activeDocument?.id == docId) {
+        _activeDocument = byDoc[docId];
+      }
+      _transientError = null;
+    } catch (_) {
+      _transientError = 'Could not save the new order.';
+    } finally {
+      notifyListeners();
+    }
+  }
+
+  /// Persists a batch of document position/folder changes and merges them into
+  /// the in-memory [_documents], keeping the Active_Document reference current.
+  Future<void> _persistDocumentChanges(
+    List<Document> changed, {
+    String? activeSync,
+  }) async {
+    if (changed.isEmpty) return;
+    try {
+      await _documentRepo.updatePositions(changed);
+      // Merge the changed documents back into the master list by id.
+      final Map<String, Document> byId = <String, Document>{
+        for (final Document d in _documents) d.id: d,
+      };
+      for (final Document d in changed) {
+        byId[d.id] = d;
+      }
+      _documents = _sortedDocuments(byId.values.toList());
+      if (activeSync != null && _activeDocument?.id == activeSync) {
+        _activeDocument = byId[activeSync];
+      }
+      _transientError = null;
+    } catch (_) {
+      _transientError = 'Could not save the new order.';
+    } finally {
+      notifyListeners();
+    }
+  }
+
+  /// Clamps a `ReorderableListView.onReorderItem` destination index into range.
+  /// `onReorderItem` already reports [newIndex] as the post-removal slot, so no
+  /// off-by-one adjustment is needed here — only clamping for safety.
+  int _normalizeReorderIndex(int oldIndex, int newIndex, int length) {
+    int target = newIndex;
+    if (target < 0) target = 0;
+    if (target > length - 1) target = length - 1;
+    return target;
+  }
+
+  /// The position to assign a newly created document in [folderId].
+  ///
+  /// For a folder, this is one past the max position among that folder's
+  /// documents. For the project root (folderId == null), the root is the
+  /// interleaved folder+document sequence, so the new document appends after
+  /// the last root item (folder or document) (Req v3).
+  int _nextDocumentPosition(String? folderId) {
+    if (folderId == null) return _nextRootPosition();
+    final Iterable<int> positions = _documents
+        .where((Document d) => d.folderId == folderId)
+        .map((Document d) => d.position);
+    if (positions.isEmpty) return 0;
+    return positions.reduce((int a, int b) => a > b ? a : b) + 1;
+  }
+
+  /// One past the maximum position across the interleaved root sequence
+  /// (folders + root-level documents), so a newly created root folder or root
+  /// document appends to the end of that shared order.
+  int _nextRootPosition() {
+    final List<RootItem> items = rootItems();
+    if (items.isEmpty) return 0;
+    return items
+            .map((RootItem it) => it.position)
+            .reduce((int a, int b) => a > b ? a : b) +
+        1;
+  }
+
+  /// The position to assign a newly created folder: one past the maximum
+  /// position across the interleaved root sequence, so a new folder appends to
+  /// the end of that shared order (Req v3).
+  int _nextFolderPosition() => _nextRootPosition();
+
+  /// Renders a document's stored Markdown [content] to plain paragraph text for
+  /// export, using the same [codec] the editor uses to load documents. Each
+  /// element of the returned list is one paragraph (blank paragraphs dropped);
+  /// formatting (bold, italic, headings, lists, links) is flattened to text.
+  List<String> contentParagraphs(String content) {
+    if (content.trim().isEmpty) return const <String>[];
+    String plain;
+    try {
+      // Convert Markdown -> Delta, then concatenate the ops' text. A Delta's
+      // insert ops carry the document text (with '\n' separating lines); this
+      // yields the same plain text the editor shows, without pulling the
+      // flutter_quill `Document` type (which name-clashes with the domain
+      // [Document]) into the state layer.
+      final Delta delta = _codec.markdownToDelta(content);
+      final StringBuffer buffer = StringBuffer();
+      for (final Operation op in delta.toList()) {
+        final Object? data = op.data;
+        if (data is String) buffer.write(data);
+      }
+      plain = buffer.toString();
+    } catch (_) {
+      // Fall back to the raw source if conversion fails on unexpected input.
+      plain = content;
+    }
+    return plain
+        .split('\n')
+        .map((String line) => line.trimRight())
+        .where((String line) => line.trim().isNotEmpty)
+        .toList(growable: false);
   }
 
   /// The `Active_Document`, or `null` when none is selected (Req 11).
@@ -285,6 +649,9 @@ class ProjectWorkspaceState extends ChangeNotifier {
       projectId: _project.id,
       name: trimmed,
       now: DateTime.now().toUtc(),
+      // Append after the current folders so a new folder lands at the end of
+      // the manual order rather than jumping to the top.
+      position: _nextFolderPosition(),
     );
 
     try {
@@ -452,6 +819,9 @@ class ProjectWorkspaceState extends ChangeNotifier {
       projectId: _project.id,
       folderId: folderId,
       now: DateTime.now().toUtc(),
+      // Append after the current documents in this container so a new document
+      // lands at the end of the manual order rather than jumping to the top.
+      position: _nextDocumentPosition(folderId),
     );
 
     try {

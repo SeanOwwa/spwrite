@@ -21,13 +21,11 @@
 library;
 
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 
 import '../domain/document.dart';
 import '../domain/folder.dart';
 import '../state/project_workspace_state.dart';
 import '../theme/app_theme.dart';
-import 'document_list_item.dart';
 
 /// A single Folder row in the Project_Sidebar and, when the Folder is expanded,
 /// the ordered Documents it contains (or an empty-folder indicator).
@@ -63,12 +61,33 @@ class FolderTile extends StatelessWidget {
   /// prompt and dispatches `deleteFolder` on confirmation.
   final VoidCallback onDelete;
 
-  /// Builds the row widget for a Document contained in this Folder, so the
-  /// parent can render either a normal [DocumentListItem] or an inline rename
-  /// field for the Document currently being renamed — keeping document rename
-  /// behaviour identical to root-level documents.
-  final Widget Function(BuildContext context, Document document)
+  /// Builds the row widget for a Document contained in this Folder at [index]
+  /// (its position in the folder's ordered list), so the parent can render a
+  /// reorderable, draggable row (or an inline rename field for the Document
+  /// currently being renamed) — keeping document behaviour identical to
+  /// root-level documents. The returned widget must carry a unique [Key] for
+  /// the reorderable list.
+  final Widget Function(BuildContext context, Document document, int index)
       documentRowBuilder;
+
+  /// Reorders the documents inside this folder: moves the document at
+  /// [oldIndex] to [newIndex] within the folder's ordered list.
+  final void Function(int oldIndex, int newIndex) onReorderDocuments;
+
+  /// Whether this folder's rename / delete controls are revealed. They are
+  /// hidden by default and shown after a long-press on the folder row (Req v3).
+  final bool controlsRevealed;
+
+  /// Called when the folder row is long-pressed, to toggle [controlsRevealed].
+  final VoidCallback onLongPress;
+
+  /// The workspace state, passed in from the parent Project_Sidebar rather than
+  /// read via `context.watch`. The sidebar already watches the state and
+  /// rebuilds this tile when it changes; passing it explicitly is also required
+  /// because a [ReorderableListView] builds its items under an internal overlay
+  /// whose `BuildContext` is not a descendant of the workspace provider, so
+  /// looking the provider up here would throw a `ProviderNotFoundException`.
+  final ProjectWorkspaceState state;
 
   const FolderTile({
     super.key,
@@ -76,16 +95,16 @@ class FolderTile extends StatelessWidget {
     required this.onRename,
     required this.onDelete,
     required this.documentRowBuilder,
+    required this.onReorderDocuments,
+    required this.state,
+    required this.controlsRevealed,
+    required this.onLongPress,
     this.isRenaming = false,
     this.renameField,
   });
 
   @override
   Widget build(BuildContext context) {
-    // Observe the workspace so the tile rebuilds when this folder's expansion
-    // state, its documents, or the Active_Document change (Req 6.4, 6.5).
-    final ProjectWorkspaceState state =
-        context.watch<ProjectWorkspaceState>();
     final bool expanded = state.isExpanded(folder.id);
 
     return Column(
@@ -137,6 +156,8 @@ class FolderTile extends StatelessWidget {
       child: InkWell(
         // Tapping the row toggles expand / collapse (Req 6.4, 6.5).
         onTap: () => state.toggleFolder(folder.id),
+        // Long-pressing reveals / hides the rename & delete controls (Req v3).
+        onLongPress: onLongPress,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
           child: Row(
@@ -182,8 +203,10 @@ class FolderTile extends StatelessWidget {
     );
   }
 
-  /// The trailing folder controls: create-document-in-folder (Req 10.2),
-  /// rename (Req 8.1), and delete (Req 9.1).
+  /// The trailing folder controls: create-document-in-folder is always
+  /// available (Req 10.2); rename (Req 8.1) and delete (Req 9.1) are hidden by
+  /// default and shown only when [controlsRevealed] is true — i.e. after the
+  /// folder row has been long-pressed (Req v3).
   Widget _buildRowControls(
     BuildContext context,
     ProjectWorkspaceState state,
@@ -203,26 +226,28 @@ class FolderTile extends StatelessWidget {
           // state also auto-expands a collapsed target folder (Req 10.6).
           onPressed: () => state.createDocument(folderId: folder.id),
         ),
-        IconButton(
-          tooltip: 'Rename folder',
-          visualDensity: VisualDensity.compact,
-          icon: const Icon(
-            Icons.edit_outlined,
-            color: AppPalette.textSecondary,
-            size: 18,
+        if (controlsRevealed) ...<Widget>[
+          IconButton(
+            tooltip: 'Rename folder',
+            visualDensity: VisualDensity.compact,
+            icon: const Icon(
+              Icons.edit_outlined,
+              color: AppPalette.textSecondary,
+              size: 18,
+            ),
+            onPressed: onRename,
           ),
-          onPressed: onRename,
-        ),
-        IconButton(
-          tooltip: 'Delete folder',
-          visualDensity: VisualDensity.compact,
-          icon: const Icon(
-            Icons.delete_outline,
-            color: AppPalette.textSecondary,
-            size: 18,
+          IconButton(
+            tooltip: 'Delete folder',
+            visualDensity: VisualDensity.compact,
+            icon: const Icon(
+              Icons.delete_outline,
+              color: AppPalette.textSecondary,
+              size: 18,
+            ),
+            onPressed: onDelete,
           ),
-          onPressed: onDelete,
-        ),
+        ],
       ],
     );
   }
@@ -250,16 +275,19 @@ class FolderTile extends StatelessWidget {
       );
     }
 
-    // Req 6.4: reveal the folder's ordered documents. Indent them beneath the
-    // folder row to convey containment.
+    // Req 6.4: reveal the folder's ordered documents, indented beneath the
+    // folder row. A ReorderableListView lets the user drag documents into a new
+    // order within the folder; the parent supplies each draggable row.
     return Padding(
       padding: const EdgeInsets.only(left: 24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        mainAxisSize: MainAxisSize.min,
+      child: ReorderableListView(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        buildDefaultDragHandles: false,
+        onReorderItem: onReorderDocuments,
         children: <Widget>[
-          for (final Document doc in documents)
-            documentRowBuilder(context, doc),
+          for (int i = 0; i < documents.length; i++)
+            documentRowBuilder(context, documents[i], i),
         ],
       ),
     );

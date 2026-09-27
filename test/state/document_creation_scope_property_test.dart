@@ -66,6 +66,13 @@ class _FakeFolderRepository implements FolderRepository {
   Future<void> update(Folder folder) async {
     _store[folder.id] = folder;
   }
+
+  @override
+  Future<void> updatePositions(List<Folder> folders) async {
+    for (final Folder f in folders) {
+      _store[f.id] = f;
+    }
+  }
 }
 
 /// Hand-written in-memory [DocumentRepository]. Stores documents in a Map keyed
@@ -110,6 +117,13 @@ class _FakeDocumentRepository implements DocumentRepository {
   @override
   Future<void> update(Document doc) async {
     _store[doc.id] = doc;
+  }
+
+  @override
+  Future<void> updatePositions(List<Document> documents) async {
+    for (final Document d in documents) {
+      _store[d.id] = d;
+    }
   }
 }
 

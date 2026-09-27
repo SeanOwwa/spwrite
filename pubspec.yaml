@@ -32,6 +32,12 @@ dependencies:
   # Cross-platform image selection for character portraits (web, desktop,
   # mobile). Returns bytes, which are stored with the character in SQLite.
   image_picker: ^1.1.2
+  # ZIP archive writing, used to assemble the .docx (OpenXML) package for the
+  # DOCX export. Pure Dart, works on web.
+  archive: ^3.6.1
+  # Browser APIs (Blob, URL, anchor) for the web-only .docx download path in
+  # lib/presentation/export/save_bytes_web.dart.
+  web: ^1.1.0
 
 dev_dependencies:
   flutter_test:

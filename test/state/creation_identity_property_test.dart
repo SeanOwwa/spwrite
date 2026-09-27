@@ -87,6 +87,13 @@ class FakeFolderRepository implements FolderRepository {
   Future<void> update(Folder folder) async {
     store[folder.id] = folder;
   }
+
+  @override
+  Future<void> updatePositions(List<Folder> folders) async {
+    for (final Folder f in folders) {
+      store[f.id] = f;
+    }
+  }
 }
 
 /// A Map-backed [DocumentRepository] whose [create] records the entity.
@@ -123,6 +130,13 @@ class FakeDocumentRepository implements DocumentRepository {
   @override
   Future<void> update(Document doc) async {
     store[doc.id] = doc;
+  }
+
+  @override
+  Future<void> updatePositions(List<Document> documents) async {
+    for (final Document d in documents) {
+      store[d.id] = d;
+    }
   }
 }
 

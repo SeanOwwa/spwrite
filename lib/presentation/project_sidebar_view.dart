@@ -71,10 +71,27 @@ class _ProjectSidebarViewState extends State<ProjectSidebarView> {
   /// never collide, so a single field disambiguates both.
   String? _renamingId;
 
+  /// The id of the single folder or document whose rename / delete controls are
+  /// currently revealed, or `null` when none are. Controls are hidden by
+  /// default and shown after a long-press on the tile (Req v3); long-pressing
+  /// the same tile again hides them.
+  String? _revealedId;
+
+  /// Toggles whether the rename / delete controls are revealed for the tile
+  /// identified by [id]. Revealing a tile hides any previously revealed one
+  /// (only one tile shows its controls at a time).
+  void _toggleRevealed(String id) {
+    setState(() => _revealedId = _revealedId == id ? null : id);
+  }
+
   /// Enters inline-rename mode for the folder or document identified by [id]
   /// (Req 8.1, 12.1).
   void _beginRename(String id) {
-    setState(() => _renamingId = id);
+    setState(() {
+      _renamingId = id;
+      // Renaming supersedes the revealed controls.
+      _revealedId = null;
+    });
   }
 
   /// Exits inline-rename mode, retaining whatever name/title the state layer
@@ -275,41 +292,210 @@ class _ProjectSidebarViewState extends State<ProjectSidebarView> {
     );
   }
 
-  /// The ordered tree body: the folders first (each an expandable [FolderTile]
-  /// revealing its documents), then the ordered Root-Level Documents (Req 6.1,
-  /// 6.2, 6.3, 6.4). A single scroll view holds both sections.
+  /// The ordered tree body: a single interleaved, reorderable list of the
+  /// project's root items — folders and root-level documents share one order,
+  /// so a document can sit above, below, or between folders (Req v3, 6.1–6.4).
+  ///
+  /// Interactions:
+  ///   * the ⠿ drag handle reorders an item within the root list (a document
+  ///     can thus swap order with a folder);
+  ///   * dragging a document's body onto a folder moves it *into* that folder;
+  ///   * dragging a folder document's body onto the root list moves it *out*;
+  ///   * long-pressing a tile reveals its rename / delete controls.
   Widget _buildTree(
     BuildContext context,
     ProjectWorkspaceState state,
     List<Folder> folders,
     List<Document> rootDocuments,
   ) {
-    return ListView(
-      children: <Widget>[
-        // Ordered, expandable folders (Req 6.1, 6.2, 6.4). Each folder builds
-        // its contained document rows through [_buildDocumentRow] so document
-        // rename / select / delete behave identically to root-level documents.
-        for (final Folder folder in folders)
-          FolderTile(
-            folder: folder,
-            isRenaming: _renamingId == folder.id,
-            renameField: _renamingId == folder.id
-                ? NameField(
-                    initialValue: folder.name,
-                    onConfirm: (String newName) =>
-                        _confirmFolderRename(state, folder.id, newName),
-                    onCancel: _endRename,
-                  )
-                : null,
-            onRename: () => _beginRename(folder.id),
-            onDelete: () => _confirmDeleteFolder(context, state, folder),
-            documentRowBuilder: (BuildContext context, Document doc) =>
-                _buildDocumentRow(context, state, doc),
+    final List<RootItem> items = state.rootItems();
+    return ReorderableListView.builder(
+      buildDefaultDragHandles: false,
+      itemCount: items.length,
+      onReorderItem: (int oldIndex, int newIndex) =>
+          state.reorderRootItems(oldIndex, newIndex),
+      itemBuilder: (BuildContext context, int index) {
+        final RootItem item = items[index];
+        if (item.isFolder) {
+          return _buildFolderEntry(context, state, item.folder!, index);
+        }
+        return _buildRootDocumentEntry(context, state, item.document!, index);
+      },
+    );
+  }
+
+  /// A folder row in the root list: a drag handle (reorder among root items), a
+  /// [DragTarget] that accepts a document dropped onto it (move into this
+  /// folder), and the [FolderTile] itself (which renders the folder's contents
+  /// and its own reorderable documents when expanded).
+  Widget _buildFolderEntry(
+    BuildContext context,
+    ProjectWorkspaceState state,
+    Folder folder,
+    int index,
+  ) {
+    return DragTarget<Document>(
+      key: ValueKey<String>('root-folder-${folder.id}'),
+      onWillAcceptWithDetails: (DragTargetDetails<Document> details) =>
+          details.data.folderId != folder.id,
+      onAcceptWithDetails: (DragTargetDetails<Document> details) {
+        // Append the moved document to the end of the target folder.
+        final int end = state.documentsIn(folder.id).length;
+        state.moveDocument(details.data.id, folder.id, end);
+      },
+      builder: (
+        BuildContext context,
+        List<Document?> candidate,
+        List<dynamic> rejected,
+      ) {
+        final bool highlighted = candidate.isNotEmpty;
+        return Container(
+          decoration: highlighted
+              ? BoxDecoration(
+                  border: Border.all(color: AppPalette.primary, width: 2),
+                  borderRadius: BorderRadius.circular(6),
+                )
+              : null,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              _buildDragHandle(index, topAligned: true),
+              Expanded(
+                child: FolderTile(
+                  folder: folder,
+                  state: state,
+                  controlsRevealed: _revealedId == folder.id,
+                  onLongPress: () => _toggleRevealed(folder.id),
+                  isRenaming: _renamingId == folder.id,
+                  renameField: _renamingId == folder.id
+                      ? NameField(
+                          initialValue: folder.name,
+                          onConfirm: (String newName) =>
+                              _confirmFolderRename(state, folder.id, newName),
+                          onCancel: _endRename,
+                        )
+                      : null,
+                  onRename: () => _beginRename(folder.id),
+                  onDelete: () =>
+                      _confirmDeleteFolder(context, state, folder),
+                  onReorderDocuments: (int oldIndex, int newIndex) =>
+                      state.reorderDocumentsInFolder(
+                          folder.id, oldIndex, newIndex),
+                  documentRowBuilder:
+                      (BuildContext context, Document doc, int docIndex) =>
+                          _buildFolderDocumentRow(
+                              context, state, doc, docIndex),
+                ),
+              ),
+            ],
           ),
-        // Ordered Root-Level Documents (Req 6.1, 6.3).
-        for (final Document doc in rootDocuments)
-          _buildDocumentRow(context, state, doc),
+        );
+      },
+    );
+  }
+
+  /// A root-level document row: a drag handle (reorder among root items) beside
+  /// the draggable, selectable document row. The document body is draggable so
+  /// it can be dropped onto a folder to move it in.
+  Widget _buildRootDocumentEntry(
+    BuildContext context,
+    ProjectWorkspaceState state,
+    Document doc,
+    int index,
+  ) {
+    return Row(
+      key: ValueKey<String>('root-doc-${doc.id}'),
+      children: <Widget>[
+        _buildDragHandle(index),
+        Expanded(child: _buildDraggableDocumentRow(context, state, doc)),
       ],
+    );
+  }
+
+  /// A document row inside a folder: a drag handle (reorder within the folder)
+  /// beside the draggable, selectable document row. Needs a stable [Key] for
+  /// the folder's [ReorderableListView].
+  Widget _buildFolderDocumentRow(
+    BuildContext context,
+    ProjectWorkspaceState state,
+    Document doc,
+    int index,
+  ) {
+    return Row(
+      key: ValueKey<String>('folder-doc-${doc.id}'),
+      children: <Widget>[
+        _buildDragHandle(index),
+        Expanded(child: _buildDraggableDocumentRow(context, state, doc)),
+      ],
+    );
+  }
+
+  /// A drag handle that starts a reorder of the item at [index] within its
+  /// enclosing reorderable list.
+  Widget _buildDragHandle(int index, {bool topAligned = false}) {
+    return ReorderableDragStartListener(
+      index: index,
+      child: Padding(
+        padding: EdgeInsets.only(top: topAligned ? 8 : 6, left: 4, right: 2),
+        child: const Icon(
+          Icons.drag_indicator,
+          size: 18,
+          color: AppPalette.textSecondary,
+        ),
+      ),
+    );
+  }
+
+  /// Wraps a document row in a [Draggable] so its body can be dragged onto a
+  /// folder (to move it in) or the root list (to move it out). Dragging the
+  /// body is distinct from the ⠿ handle (which reorders) and from a tap (which
+  /// selects). The floating feedback is a compact chip of the title.
+  Widget _buildDraggableDocumentRow(
+    BuildContext context,
+    ProjectWorkspaceState state,
+    Document doc,
+  ) {
+    // While renaming, do not make the row draggable — the inline field needs
+    // normal pointer handling.
+    if (_renamingId == doc.id) {
+      return _buildDocumentRow(context, state, doc);
+    }
+
+    final String shownTitle =
+        doc.title.trim().isEmpty ? 'Untitled Document' : doc.title;
+
+    return Draggable<Document>(
+      data: doc,
+      dragAnchorStrategy: childDragAnchorStrategy,
+      // A small delay-free drag on the body; taps still pass through to select.
+      feedback: Material(
+        color: Colors.transparent,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: AppPalette.surfaceVariant,
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(color: AppPalette.primary),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              const Icon(Icons.description_outlined,
+                  size: 16, color: AppPalette.textSecondary),
+              const SizedBox(width: 6),
+              Text(
+                shownTitle,
+                style: const TextStyle(color: AppPalette.textPrimary),
+              ),
+            ],
+          ),
+        ),
+      ),
+      childWhenDragging: Opacity(
+        opacity: 0.4,
+        child: _buildDocumentRow(context, state, doc),
+      ),
+      child: _buildDocumentRow(context, state, doc),
     );
   }
 
@@ -318,9 +504,10 @@ class _ProjectSidebarViewState extends State<ProjectSidebarView> {
   /// identical (Req 6.6, 6.7, 6.8, 11.1, 12.1, 13.1).
   ///
   /// When the row is in inline-rename mode it renders an editable [NameField]
-  /// in place of the row (Req 12.1); otherwise it renders the reused
+  /// in place of the row (Req 12.1). Otherwise it renders the reused
   /// [DocumentListItem] with the active-document highlight (Req 6.8), tap to
-  /// select (Req 11.1), and trailing rename / delete controls.
+  /// select (Req 11.1), a long-press to reveal the rename / delete controls,
+  /// and those controls only when this row is the revealed one.
   Widget _buildDocumentRow(
     BuildContext context,
     ProjectWorkspaceState state,
@@ -343,19 +530,21 @@ class _ProjectSidebarViewState extends State<ProjectSidebarView> {
     }
 
     // Normal row: display title (Req 6.6, 6.7), active highlight (Req 6.8),
-    // tap to select (Req 11.1), and trailing rename / delete controls
-    // (Req 12.1, 13.1).
+    // tap to select (Req 11.1), long-press to reveal controls, and the
+    // rename / delete controls only when revealed (Req 12.1, 13.1).
+    final bool revealed = _revealedId == doc.id;
     return DocumentListItem(
       document: doc,
       isActive: doc.id == state.activeDocument?.id,
       onTap: () => state.selectDocument(doc.id),
-      trailing: _buildDocumentControls(context, state, doc),
+      onLongPress: () => _toggleRevealed(doc.id),
+      trailing: revealed ? _buildDocumentControls(context, state, doc) : null,
     );
   }
 
   /// The per-document trailing controls: a rename (edit) button that enters
   /// inline rename mode (Req 12.1) and a delete button that opens the
-  /// confirmation dialog (Req 13.1).
+  /// confirmation dialog (Req 13.1). Shown only after the row is long-pressed.
   Widget _buildDocumentControls(
     BuildContext context,
     ProjectWorkspaceState state,

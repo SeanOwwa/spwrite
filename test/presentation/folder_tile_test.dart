@@ -55,6 +55,13 @@ class _FakeFolderRepository implements FolderRepository {
   }
 
   @override
+  Future<void> updatePositions(List<Folder> folders) async {
+    for (final Folder f in folders) {
+      _folders[f.id] = f;
+    }
+  }
+
+  @override
   Future<void> deleteCascade(String id) async {
     _folders.remove(id);
     _documents.removeWhere((_, Document d) => d.folderId == id);
@@ -94,6 +101,13 @@ class _FakeDocumentRepository implements DocumentRepository {
   @override
   Future<void> update(Document doc) async {
     _documents[doc.id] = doc;
+  }
+
+  @override
+  Future<void> updatePositions(List<Document> documents) async {
+    for (final Document d in documents) {
+      _documents[d.id] = d;
+    }
   }
 
   @override
@@ -167,21 +181,41 @@ Future<void> _pumpTile(
   Widget? renameField,
   VoidCallback? onRename,
   VoidCallback? onDelete,
+  // Default to revealed so the control-visibility/behaviour tests exercise the
+  // rename & delete icons directly. The reveal-on-long-press gating itself is a
+  // Project_Sidebar concern (it owns which tile is revealed).
+  bool controlsRevealed = true,
+  VoidCallback? onLongPress,
 }) async {
   await tester.pumpWidget(
     MaterialApp(
       home: Scaffold(
         body: ChangeNotifierProvider<ProjectWorkspaceState>.value(
           value: state,
+          // Consume the state so the tile rebuilds on notifyListeners, mirroring
+          // how the real ProjectSidebarView watches the workspace and rebuilds
+          // the tree (FolderTile itself takes the state as a parameter because
+          // it is rendered inside a ReorderableListView overlay in production).
           child: SingleChildScrollView(
-            child: FolderTile(
-              folder: folder,
-              isRenaming: isRenaming,
-              renameField: renameField,
-              onRename: onRename ?? () {},
-              onDelete: onDelete ?? () {},
-              documentRowBuilder: (BuildContext context, Document doc) =>
-                  DocumentListItem(document: doc),
+            child: Consumer<ProjectWorkspaceState>(
+              builder: (BuildContext context, ProjectWorkspaceState s, _) =>
+                  FolderTile(
+                folder: folder,
+                state: s,
+                controlsRevealed: controlsRevealed,
+                onLongPress: onLongPress ?? () {},
+                isRenaming: isRenaming,
+                renameField: renameField,
+                onRename: onRename ?? () {},
+                onDelete: onDelete ?? () {},
+                onReorderDocuments: (int oldIndex, int newIndex) {},
+                documentRowBuilder:
+                    (BuildContext context, Document doc, int index) =>
+                        DocumentListItem(
+                  key: ValueKey<String>('doc-${doc.id}'),
+                  document: doc,
+                ),
+              ),
             ),
           ),
         ),

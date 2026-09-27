@@ -118,7 +118,7 @@ class CharacterPanelState extends ChangeNotifier {
     }
   }
 
-  /// Persists edited [character] fields (name, role, summary, notes, image),
+  /// Persists edited [character] fields (name, role, notes/details, image),
   /// advancing its last-modified timestamp, then updates and re-sorts the
   /// in-memory list. On failure a transient error is surfaced and the in-memory
   /// list is left unchanged.

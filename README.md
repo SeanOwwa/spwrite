@@ -19,14 +19,24 @@ browser on the web), so your writing is always with you and works offline.
 
 - Keep separate **projects** for different books, articles, or clients.
 - Sort each project into **folders** and **documents**.
+- **Drag to organize.** Grab the handle on the left of any row to reorder it.
+  Folders and loose documents share one list, so a document can sit above,
+  below, or between folders. Drag a document onto a folder to move it in, or
+  drag it back out to the top level — and move documents from one folder to
+  another the same way.
+- **Tidy controls.** Rename and delete buttons stay hidden until you long-press
+  a folder or document, so the sidebar stays clean while you write.
 - Format as you write — bold, italic, headings, lists, and links.
 - **Tab to indent.** Pressing Tab drops a clean 10-space indent wherever your
   cursor is.
+- **Export to Word.** Send any selection of documents to a single `.docx` file
+  from the export icon in the editor toolbar. Each document's title becomes a
+  heading and its text the body, with every document starting on a new page.
 - **Character Panel.** Keep your cast close while you write. Open it from the
   people icon on the right of the editor toolbar to see a scrollable list of
-  your characters. Each one has a name, role, a short summary, longer notes, and
-  a portrait image. Tap "See more" to read a character's full details right in
-  the sidebar, or open one to edit it on its own screen.
+  your characters. Each one has a name, role, free-form details, and a portrait
+  image. The sidebar shows a short preview of the details; tap "See more" to
+  read the full details right there, or open one to edit it on its own screen.
 - **Autosave.** Your work saves itself as you go; there is no Save button to
   remember.
 

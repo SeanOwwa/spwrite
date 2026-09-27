@@ -75,6 +75,10 @@ class DocumentListItem extends StatelessWidget {
   /// Called when the user taps the row (select the Document).
   final VoidCallback? onTap;
 
+  /// Called when the user long-presses the row. The Sidebar uses this to
+  /// reveal / hide the per-item rename and delete controls (Req v3).
+  final VoidCallback? onLongPress;
+
   /// Optional trailing widget, typically the per-item rename/delete controls.
   final Widget? trailing;
 
@@ -83,6 +87,7 @@ class DocumentListItem extends StatelessWidget {
     required this.document,
     this.isActive = false,
     this.onTap,
+    this.onLongPress,
     this.trailing,
   });
 
@@ -113,6 +118,7 @@ class DocumentListItem extends StatelessWidget {
           ),
         ),
         onTap: onTap,
+        onLongPress: onLongPress,
         trailing: trailing,
       ),
     );

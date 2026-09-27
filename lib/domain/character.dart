@@ -3,10 +3,9 @@
 ///
 /// A character belongs to exactly one project ([Character.projectId]) — the
 /// author's cast of fictional people for that book/project. Each character has
-/// a name, an optional role/title, a short one-line summary, a longer free-form
-/// notes/description body, an optional portrait image (stored as raw bytes so
-/// it is fully portable across web, desktop, and mobile), and creation /
-/// last-modified timestamps.
+/// a name, an optional role/title, a free-form details/notes body, an optional
+/// portrait image (stored as raw bytes so it is fully portable across web,
+/// desktop, and mobile), and creation / last-modified timestamps.
 ///
 /// Timestamps are persisted as integer milliseconds since the Unix epoch in UTC
 /// for stable, timezone-independent ordering and round-tripping, matching the
@@ -25,7 +24,6 @@ class CharacterColumns {
   static const String projectId = 'project_id';
   static const String name = 'name';
   static const String role = 'role';
-  static const String summary = 'summary';
   static const String notes = 'notes';
 
   /// The portrait image bytes (a BLOB), or NULL when the character has no
@@ -37,7 +35,7 @@ class CharacterColumns {
 }
 
 /// An immutable fictional character belonging to a project: a name, optional
-/// role, short summary, longer notes, an optional portrait image, a unique
+/// role, free-form details/notes, an optional portrait image, a unique
 /// identifier, and creation / last-modified timestamps.
 class Character {
   /// The maximum length, in characters, of the [name].
@@ -45,9 +43,6 @@ class Character {
 
   /// The maximum length, in characters, of the [role].
   static const int maxRoleLength = 255;
-
-  /// The maximum length, in characters, of the one-line [summary].
-  static const int maxSummaryLength = 500;
 
   /// The maximum length, in characters, of the free-form [notes] body.
   static const int maxNotesLength = 100000;
@@ -67,13 +62,9 @@ class Character {
   /// "Mentor"). May be empty. 0..[maxRoleLength] characters.
   final String role;
 
-  /// A short, one-line summary shown collapsed in the sidebar list. May be
-  /// empty. 0..[maxSummaryLength] characters.
-  final String summary;
-
-  /// Free-form notes / description (backstory, appearance, arc, relationships).
-  /// May be empty. Revealed when the sidebar entry is expanded ("see more").
-  /// 0..[maxNotesLength] characters.
+  /// Free-form details / notes (backstory, appearance, arc, relationships).
+  /// May be empty. Shown truncated in the sidebar with a "See more" control
+  /// that reveals the full text. 0..[maxNotesLength] characters.
   final String notes;
 
   /// The character's portrait image bytes, or `null` when none is set. Stored
@@ -91,7 +82,6 @@ class Character {
     required this.projectId,
     required this.name,
     required this.role,
-    required this.summary,
     required this.notes,
     required this.image,
     required this.createdAt,
@@ -110,7 +100,6 @@ class Character {
       projectId: projectId,
       name: '',
       role: '',
-      summary: '',
       notes: '',
       image: null,
       createdAt: now,
@@ -127,7 +116,6 @@ class Character {
   Character copyWith({
     String? name,
     String? role,
-    String? summary,
     String? notes,
     Uint8List? image,
     bool clearImage = false,
@@ -138,7 +126,6 @@ class Character {
       projectId: projectId,
       name: name ?? this.name,
       role: role ?? this.role,
-      summary: summary ?? this.summary,
       notes: notes ?? this.notes,
       image: clearImage ? null : (image ?? this.image),
       createdAt: createdAt,
@@ -155,7 +142,6 @@ class Character {
       CharacterColumns.projectId: projectId,
       CharacterColumns.name: name,
       CharacterColumns.role: role,
-      CharacterColumns.summary: summary,
       CharacterColumns.notes: notes,
       CharacterColumns.image: image,
       CharacterColumns.createdAt: createdAt.toUtc().millisecondsSinceEpoch,
@@ -179,7 +165,6 @@ class Character {
       projectId: row[CharacterColumns.projectId]! as String,
       name: (row[CharacterColumns.name] as String?) ?? '',
       role: (row[CharacterColumns.role] as String?) ?? '',
-      summary: (row[CharacterColumns.summary] as String?) ?? '',
       notes: (row[CharacterColumns.notes] as String?) ?? '',
       image: image,
       createdAt: DateTime.fromMillisecondsSinceEpoch(

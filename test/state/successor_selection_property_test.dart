@@ -89,6 +89,13 @@ class _FakeFolderRepository implements FolderRepository {
   }
 
   @override
+  Future<void> updatePositions(List<Folder> folders) async {
+    for (final Folder f in folders) {
+      _folders[f.id] = f;
+    }
+  }
+
+  @override
   Future<void> deleteCascade(String id) async {
     // Mirror the real transactional cascade: drop the folder AND every document
     // it contains from the shared store, all-or-nothing.
@@ -132,6 +139,13 @@ class _FakeDocumentRepository implements DocumentRepository {
   @override
   Future<void> update(Document doc) async {
     _documents[doc.id] = doc;
+  }
+
+  @override
+  Future<void> updatePositions(List<Document> documents) async {
+    for (final Document d in documents) {
+      _documents[d.id] = d;
+    }
   }
 
   @override

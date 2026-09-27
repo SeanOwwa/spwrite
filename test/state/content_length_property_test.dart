@@ -78,6 +78,13 @@ class _InMemoryFolderRepo implements FolderRepository {
   Future<void> update(Folder folder) async {
     _folders[folder.id] = folder;
   }
+
+  @override
+  Future<void> updatePositions(List<Folder> folders) async {
+    for (final Folder f in folders) {
+      _folders[f.id] = f;
+    }
+  }
 }
 
 /// In-memory [DocumentRepository]. `create` stores the document and returns it;
@@ -117,6 +124,13 @@ class _InMemoryDocumentRepo implements DocumentRepository {
   @override
   Future<void> update(Document doc) async {
     _docs[doc.id] = doc;
+  }
+
+  @override
+  Future<void> updatePositions(List<Document> documents) async {
+    for (final Document d in documents) {
+      _docs[d.id] = d;
+    }
   }
 }
 

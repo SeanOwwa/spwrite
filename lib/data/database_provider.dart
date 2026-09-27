@@ -72,10 +72,12 @@ class DatabaseProvider {
   ///
   /// - v2: the three-table Project → Folder → Document relational model.
   /// - v3: adds the project-scoped `characters` table (Character Panel).
+  /// - v4: adds a `position` column to `folders` and `documents` so the user's
+  ///   manual drag-and-drop ordering in the sidebar is persisted.
   ///
-  /// Bumping this triggers [openAppDatabase]'s `onUpgrade` so an existing v2
-  /// store gains the new table without losing its projects / documents.
-  static const int schemaVersion = 3;
+  /// Bumping this triggers [openAppDatabase]'s `onUpgrade` so an existing store
+  /// gains the new column without losing its projects / documents.
+  static const int schemaVersion = 4;
 
   /// Selects and configures the platform-appropriate `DatabaseFactory`.
   ///
@@ -140,6 +142,11 @@ class DatabaseProvider {
         if (oldVersion < 3) {
           await _createCharactersTable(db);
         }
+        // v3 -> v4: add the `position` column to folders and documents so the
+        // user's manual sidebar ordering persists.
+        if (oldVersion < 4) {
+          await _addPositionColumns(db);
+        }
       },
       onConfigure: (Database db) async {
         // The web (WASM) factory rejects this PRAGMA during open. On native
@@ -159,8 +166,32 @@ class DatabaseProvider {
         // every open guarantees the Character Panel has its table on both fresh
         // and pre-existing databases, on every platform.
         await _createCharactersTable(db);
+        // Same safety net for the v4 `position` columns: the web factory does
+        // not reliably run onUpgrade, and SQLite has no "ADD COLUMN IF NOT
+        // EXISTS", so [_addPositionColumns] swallows the duplicate-column error
+        // and is safe to call on every open.
+        await _addPositionColumns(db);
       },
     );
+  }
+
+  /// Adds the `position` column to the `folders` and `documents` tables if it
+  /// is not already present (the v3 -> v4 migration). SQLite lacks
+  /// `ADD COLUMN IF NOT EXISTS`, so each ALTER is wrapped in a try/catch that
+  /// swallows the "duplicate column name" error, making this idempotent and
+  /// safe to run from both `onUpgrade` and `onOpen` (the latter covers the web
+  /// factory, which does not reliably invoke `onUpgrade`).
+  static Future<void> _addPositionColumns(Database db) async {
+    for (final String table in <String>[foldersTable, documentsTable]) {
+      try {
+        await db.execute(
+          'ALTER TABLE $table ADD COLUMN '
+          '${FolderColumns.position} INTEGER NOT NULL DEFAULT 0',
+        );
+      } catch (_) {
+        // Column already exists — nothing to do.
+      }
+    }
   }
 
   /// Creates the v2 relational schema — the `projects`, `folders`, and
@@ -193,6 +224,7 @@ class DatabaseProvider {
         ${FolderColumns.projectId}   TEXT    NOT NULL,
         ${FolderColumns.createdAt}   INTEGER NOT NULL,
         ${FolderColumns.modifiedAt}  INTEGER NOT NULL,
+        ${FolderColumns.position}    INTEGER NOT NULL DEFAULT 0,
         FOREIGN KEY (${FolderColumns.projectId})
           REFERENCES $projectsTable (${ProjectColumns.id}) ON DELETE CASCADE
       )
@@ -209,6 +241,7 @@ class DatabaseProvider {
         ${DocumentColumns.folderId}    TEXT,
         ${DocumentColumns.createdAt}   INTEGER NOT NULL,
         ${DocumentColumns.modifiedAt}  INTEGER NOT NULL,
+        ${DocumentColumns.position}    INTEGER NOT NULL DEFAULT 0,
         FOREIGN KEY (${DocumentColumns.projectId})
           REFERENCES $projectsTable (${ProjectColumns.id}) ON DELETE CASCADE,
         FOREIGN KEY (${DocumentColumns.folderId})
@@ -275,7 +308,10 @@ class DatabaseProvider {
         ${CharacterColumns.projectId}   TEXT    NOT NULL,
         ${CharacterColumns.name}        TEXT    NOT NULL DEFAULT '',
         ${CharacterColumns.role}        TEXT    NOT NULL DEFAULT '',
-        ${CharacterColumns.summary}     TEXT    NOT NULL DEFAULT '',
+        -- Legacy column, retained so existing databases keep a stable schema.
+        -- No longer written or read by the app (the character "summary" field
+        -- was removed); kept NOT NULL DEFAULT '' so inserts that omit it work.
+        summary                         TEXT    NOT NULL DEFAULT '',
         ${CharacterColumns.notes}       TEXT    NOT NULL DEFAULT '',
         ${CharacterColumns.image}       BLOB,
         ${CharacterColumns.createdAt}   INTEGER NOT NULL,

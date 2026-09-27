@@ -46,6 +46,12 @@ abstract class DocumentRepository {
   /// document (Req 16.1).
   Future<void> update(Document doc);
 
+  /// Persists the `position` (and any changed containing folder) of each of
+  /// [documents] transactionally, for drag-and-drop reordering and moving a
+  /// document between containers. All-or-nothing: either every row is updated
+  /// or none is.
+  Future<void> updatePositions(List<Document> documents);
+
   /// Removes the document identified by [id] from the store (Req 13.2). Throws
   /// on failure.
   Future<void> delete(String id);

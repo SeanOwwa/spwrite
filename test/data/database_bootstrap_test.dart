@@ -41,9 +41,24 @@ void main() {
           ]),
         );
 
-        // The schema version is recorded as 2.
+        // The schema version is recorded as the current schemaVersion.
         final versionRows = await db.rawQuery('PRAGMA user_version');
-        expect(versionRows.first.values.first, 2);
+        expect(
+          versionRows.first.values.first,
+          DatabaseProvider.schemaVersion,
+        );
+
+        // The v4 `position` column exists on folders and documents (drag order).
+        final folderCols = await db.rawQuery('PRAGMA table_info(folders)');
+        expect(
+          folderCols.map((row) => row['name'] as String),
+          contains('position'),
+        );
+        final docCols = await db.rawQuery('PRAGMA table_info(documents)');
+        expect(
+          docCols.map((row) => row['name'] as String),
+          contains('position'),
+        );
 
         // Each table is queryable and starts empty (no "no such table" error).
         expect(await db.query('projects'), isEmpty);

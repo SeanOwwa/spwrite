@@ -35,6 +35,10 @@ abstract class FolderRepository {
   /// Persists name / last-modified changes for an existing folder (Req 8.2).
   Future<void> update(Folder folder);
 
+  /// Persists the `position` of each of [folders] transactionally, for
+  /// drag-and-drop reordering of the folder list. All-or-nothing.
+  Future<void> updatePositions(List<Folder> folders);
+
   /// Removes the folder identified by [id] **and all documents it contains**,
   /// transactionally (Req 9.2).
   ///

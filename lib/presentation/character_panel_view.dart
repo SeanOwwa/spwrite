@@ -3,9 +3,9 @@
 ///
 /// It observes [CharacterPanelState] via `provider` and renders a scrollable
 /// list of character cards. Each card shows the portrait (or a placeholder
-/// avatar), the name and role, and a collapsed one-line summary; a "See more"
-/// control expands the card inline to reveal the full notes so the author can
-/// read without leaving the panel. Tapping the edit control opens the
+/// avatar), the name and role, and the details truncated to a short preview; a
+/// "See more" control expands the card inline to reveal the full details so the
+/// author can read without leaving the panel. Tapping the edit control opens the
 /// [CharacterEditView] on a new screen. A header hosts the add-character (+)
 /// control and a close button. All colors are drawn from [AppPalette].
 library;
@@ -159,8 +159,9 @@ class CharacterPanelView extends StatelessWidget {
 }
 
 /// A single character entry in the sidebar. Collapsed it shows the avatar,
-/// name, role, and one-line summary; a "See more" control expands it inline to
-/// reveal the full notes. On desktop/web a hover highlight hints interactivity.
+/// name, role, and the details truncated to a short preview; a "See more"
+/// control expands it inline to reveal the full details. On desktop/web a hover
+/// highlight hints interactivity.
 class _CharacterCard extends StatefulWidget {
   final Character character;
   final VoidCallback onEdit;
@@ -175,11 +176,20 @@ class _CharacterCardState extends State<_CharacterCard> {
   bool _expanded = false;
   bool _hovered = false;
 
+  /// The number of characters of the details shown collapsed before it is
+  /// truncated with an ellipsis and a "See more" control.
+  static const int _previewLength = 200;
+
   @override
   Widget build(BuildContext context) {
     final Character c = widget.character;
-    final bool hasNotes = c.notes.trim().isNotEmpty;
-    final bool hasSummary = c.summary.trim().isNotEmpty;
+    final String details = c.notes.trim();
+    final bool hasDetails = details.isNotEmpty;
+    // Only offer "See more" when the details actually exceed the preview.
+    final bool isTruncatable = details.length > _previewLength;
+    final String preview = isTruncatable
+        ? '${details.substring(0, _previewLength).trimRight()}…'
+        : details;
 
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
@@ -238,36 +248,22 @@ class _CharacterCardState extends State<_CharacterCard> {
                 ),
               ],
             ),
-            if (hasSummary) ...<Widget>[
+            // The character details: shown truncated to [_previewLength]
+            // characters with an ellipsis, and revealed in full when expanded.
+            if (hasDetails) ...<Widget>[
               const SizedBox(height: 8),
               Text(
-                c.summary,
-                maxLines: _expanded ? null : 2,
-                overflow: _expanded ? null : TextOverflow.ellipsis,
+                _expanded ? details : preview,
                 style: const TextStyle(
                   color: AppPalette.textSecondary,
                   fontSize: 13,
-                  height: 1.35,
+                  height: 1.4,
                 ),
               ),
             ],
-            // Expanded notes ("see more" reveals the full free-form body).
-            if (_expanded && hasNotes) ...<Widget>[
-              const SizedBox(height: 10),
-              const Divider(height: 1, color: AppPalette.outline),
-              const SizedBox(height: 10),
-              Text(
-                c.notes,
-                style: const TextStyle(
-                  color: AppPalette.textPrimary,
-                  fontSize: 13,
-                  height: 1.45,
-                ),
-              ),
-            ],
-            // "See more" / "See less" toggle, shown when there is more to read
-            // than the collapsed view reveals.
-            if (hasNotes || (hasSummary))
+            // "See more" / "See less" toggle, only when the details are longer
+            // than the collapsed preview.
+            if (isTruncatable)
               Align(
                 alignment: Alignment.centerLeft,
                 child: TextButton(

@@ -25,6 +25,10 @@ class DocumentColumns {
   static const String folderId = 'folder_id';
   static const String createdAt = 'created_at';
   static const String modifiedAt = 'modified_at';
+
+  /// Manual sort order within the document's container (its folder, or the
+  /// project root). Lower sorts first. Set by drag-and-drop reordering.
+  static const String position = 'position';
 }
 
 /// An immutable writing artifact: a title, Markdown content, a unique
@@ -56,6 +60,11 @@ class Document {
   /// Last-modified timestamp (Req 10.1, 12.2, 14.9, 17.3).
   final DateTime modifiedAt;
 
+  /// Manual sort order within this document's container (its folder, or the
+  /// project root). Lower values sort first. Defaults to 0; assigned real
+  /// values by creation and drag-and-drop reordering.
+  final int position;
+
   const Document({
     required this.id,
     required this.title,
@@ -64,6 +73,7 @@ class Document {
     this.folderId,
     required this.createdAt,
     required this.modifiedAt,
+    this.position = 0,
   });
 
   /// Creates a brand-new document with the default title "Untitled Document",
@@ -75,6 +85,7 @@ class Document {
     required String projectId,
     String? folderId,
     required DateTime now,
+    int position = 0,
   }) {
     return Document(
       id: id,
@@ -84,6 +95,7 @@ class Document {
       folderId: folderId,
       createdAt: now,
       modifiedAt: now, // Req 10.3: modified == created on creation
+      position: position,
     );
   }
 
@@ -92,20 +104,27 @@ class Document {
   /// containing folder, and the last-modified timestamp) may be overridden;
   /// [id], [projectId], and [createdAt] are immutable for the life of the
   /// document.
+  ///
+  /// Because [folderId] is nullable and moving a document to the project root
+  /// (folderId == null) is a valid edit, an explicit [moveToRoot] flag
+  /// distinguishes "leave the folder unchanged" (default) from "move to root".
   Document copyWith({
     String? title,
     String? content,
     String? folderId,
+    bool moveToRoot = false,
     DateTime? modifiedAt,
+    int? position,
   }) {
     return Document(
       id: id,
       title: title ?? this.title,
       content: content ?? this.content,
       projectId: projectId,
-      folderId: folderId ?? this.folderId,
+      folderId: moveToRoot ? null : (folderId ?? this.folderId),
       createdAt: createdAt,
       modifiedAt: modifiedAt ?? this.modifiedAt,
+      position: position ?? this.position,
     );
   }
 
@@ -121,6 +140,7 @@ class Document {
       DocumentColumns.folderId: folderId,
       DocumentColumns.createdAt: createdAt.toUtc().millisecondsSinceEpoch,
       DocumentColumns.modifiedAt: modifiedAt.toUtc().millisecondsSinceEpoch,
+      DocumentColumns.position: position,
     };
   }
 
@@ -143,6 +163,7 @@ class Document {
         (row[DocumentColumns.modifiedAt]! as num).toInt(),
         isUtc: true,
       ),
+      position: (row[DocumentColumns.position] as num?)?.toInt() ?? 0,
     );
   }
 
@@ -155,6 +176,7 @@ class Document {
         other.content == content &&
         other.projectId == projectId &&
         other.folderId == folderId &&
+        other.position == position &&
         other.createdAt.toUtc().millisecondsSinceEpoch ==
             createdAt.toUtc().millisecondsSinceEpoch &&
         other.modifiedAt.toUtc().millisecondsSinceEpoch ==
@@ -169,6 +191,7 @@ class Document {
       content,
       projectId,
       folderId,
+      position,
       createdAt.toUtc().millisecondsSinceEpoch,
       modifiedAt.toUtc().millisecondsSinceEpoch,
     );
@@ -197,13 +220,18 @@ class Document {
 /// Returns a negative value if [a] should sort before [b], a positive value if
 /// [a] should sort after [b], and zero when they are equivalent under the rule.
 int compareDocuments(Document a, Document b) {
-  // Primary key: last-modified timestamp, descending (most recent first).
+  // Primary key: manual position, ascending (drag-and-drop order).
+  final int byPosition = a.position.compareTo(b.position);
+  if (byPosition != 0) return byPosition;
+
+  // Tie-breaker 1 (e.g. legacy rows all at position 0): last-modified
+  // timestamp, descending (most recent first).
   final int aMillis = a.modifiedAt.toUtc().millisecondsSinceEpoch;
   final int bMillis = b.modifiedAt.toUtc().millisecondsSinceEpoch;
   final int byModified = bMillis.compareTo(aMillis);
   if (byModified != 0) return byModified;
 
-  // Tie-breaker: title ascending, case-insensitive.
+  // Tie-breaker 2: title ascending, case-insensitive.
   return a.title.toLowerCase().compareTo(b.title.toLowerCase());
 }
 

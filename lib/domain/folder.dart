@@ -22,6 +22,10 @@ class FolderColumns {
   static const String projectId = 'project_id';
   static const String createdAt = 'created_at';
   static const String modifiedAt = 'modified_at';
+
+  /// Manual sort order of the folder within its project. Lower sorts first.
+  /// Set by drag-and-drop reordering.
+  static const String position = 'position';
 }
 
 /// An immutable container that groups Documents within a single Project. A
@@ -48,12 +52,18 @@ class Folder {
   /// Last-modified timestamp (Req 7.2, 8.2, 17.2).
   final DateTime modifiedAt;
 
+  /// Manual sort order of this folder within its project. Lower values sort
+  /// first. Defaults to 0; assigned real values by creation and drag-and-drop
+  /// reordering.
+  final int position;
+
   const Folder({
     required this.id,
     required this.name,
     required this.projectId,
     required this.createdAt,
     required this.modifiedAt,
+    this.position = 0,
   });
 
   /// Creates a brand-new folder whose last-modified timestamp equals its
@@ -63,6 +73,7 @@ class Folder {
     required String projectId,
     required String name,
     required DateTime now,
+    int position = 0,
   }) {
     return Folder(
       id: id,
@@ -70,6 +81,7 @@ class Folder {
       projectId: projectId,
       createdAt: now,
       modifiedAt: now, // Req 7.2: modified == created on creation
+      position: position,
     );
   }
 
@@ -80,6 +92,7 @@ class Folder {
   Folder copyWith({
     String? name,
     DateTime? modifiedAt,
+    int? position,
   }) {
     return Folder(
       id: id,
@@ -87,6 +100,7 @@ class Folder {
       projectId: projectId,
       createdAt: createdAt,
       modifiedAt: modifiedAt ?? this.modifiedAt,
+      position: position ?? this.position,
     );
   }
 
@@ -99,6 +113,7 @@ class Folder {
       FolderColumns.projectId: projectId,
       FolderColumns.createdAt: createdAt.toUtc().millisecondsSinceEpoch,
       FolderColumns.modifiedAt: modifiedAt.toUtc().millisecondsSinceEpoch,
+      FolderColumns.position: position,
     };
   }
 
@@ -118,6 +133,7 @@ class Folder {
         (row[FolderColumns.modifiedAt]! as num).toInt(),
         isUtc: true,
       ),
+      position: (row[FolderColumns.position] as num?)?.toInt() ?? 0,
     );
   }
 
@@ -128,6 +144,7 @@ class Folder {
         other.id == id &&
         other.name == name &&
         other.projectId == projectId &&
+        other.position == position &&
         other.createdAt.toUtc().millisecondsSinceEpoch ==
             createdAt.toUtc().millisecondsSinceEpoch &&
         other.modifiedAt.toUtc().millisecondsSinceEpoch ==
@@ -140,6 +157,7 @@ class Folder {
       id,
       name,
       projectId,
+      position,
       createdAt.toUtc().millisecondsSinceEpoch,
       modifiedAt.toUtc().millisecondsSinceEpoch,
     );
@@ -166,13 +184,18 @@ class Folder {
 /// Returns a negative value if [a] should sort before [b], a positive value if
 /// [a] should sort after [b], and zero when they are equivalent under the rule.
 int compareFolders(Folder a, Folder b) {
-  // Primary key: last-modified timestamp, descending (most recent first).
+  // Primary key: manual position, ascending (drag-and-drop order).
+  final int byPosition = a.position.compareTo(b.position);
+  if (byPosition != 0) return byPosition;
+
+  // Tie-breaker 1 (e.g. legacy rows all at position 0): last-modified
+  // timestamp, descending (most recent first).
   final int aMillis = a.modifiedAt.toUtc().millisecondsSinceEpoch;
   final int bMillis = b.modifiedAt.toUtc().millisecondsSinceEpoch;
   final int byModified = bMillis.compareTo(aMillis);
   if (byModified != 0) return byModified;
 
-  // Tie-breaker: name ascending, case-insensitive.
+  // Tie-breaker 2: name ascending, case-insensitive.
   return a.name.toLowerCase().compareTo(b.name.toLowerCase());
 }
 

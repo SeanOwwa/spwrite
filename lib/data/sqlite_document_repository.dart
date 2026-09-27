@@ -28,11 +28,12 @@ class SqliteDocumentRepository implements DocumentRepository {
   /// identifier used here matches the one the schema was created with.
   static const String _table = DatabaseProvider.documentsTable;
 
-  /// The canonical per-container ordering clause: last-modified timestamp
-  /// descending, then title ascending as a tie-breaker (Req 6.3). Mirrors the
-  /// shared [compareDocuments] rule so the query and any in-memory re-sort
-  /// agree.
+  /// The canonical per-container ordering clause: manual position ascending,
+  /// then last-modified timestamp descending and title ascending as
+  /// tie-breakers. Mirrors the shared [compareDocuments] rule so the query and
+  /// any in-memory re-sort agree.
   static const String _orderBy =
+      '${DocumentColumns.position} ASC, '
       '${DocumentColumns.modifiedAt} DESC, ${DocumentColumns.title} ASC';
 
   /// Creates a repository over the given open [database].
@@ -140,5 +141,23 @@ class SqliteDocumentRepository implements DocumentRepository {
       where: '${DocumentColumns.id} = ?',
       whereArgs: <Object?>[id],
     );
+  }
+
+  /// Persists the `position` (and possibly changed `folder_id`) of each of
+  /// [documents] in a single transaction, so a drag-and-drop reorder or a
+  /// move between containers is applied all-or-nothing. Each document's full
+  /// row is written via [Document.toRow]; only the id is used in the `WHERE`.
+  @override
+  Future<void> updatePositions(List<Document> documents) async {
+    await _db.transaction((Transaction txn) async {
+      for (final Document doc in documents) {
+        await txn.update(
+          _table,
+          doc.toRow(),
+          where: '${DocumentColumns.id} = ?',
+          whereArgs: <Object?>[doc.id],
+        );
+      }
+    });
   }
 }

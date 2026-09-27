@@ -34,6 +34,11 @@
 /// leaks between documents.
 library;
 
+// flutter_quill's `QuillEditorConfig.onKeyPressed` (used to hard-wire the Tab
+// indent) is annotated @experimental in 11.6.0. We rely on it deliberately and
+// in one contained place, so silence that specific lint for this file.
+// ignore_for_file: experimental_member_use
+
 import 'package:flutter/material.dart';
 // The flutter_quill barrel exports a `Document` class that collides with the
 // app's domain [Document]. Hide it from the general import and pull it in under
@@ -49,6 +54,7 @@ import '../state/project_workspace_state.dart';
 import '../theme/app_theme.dart';
 import 'character_panel_view.dart';
 import 'editor_toolbar.dart';
+import 'export/export_dialog.dart';
 
 /// The WYSIWYG writing surface for the [ProjectWorkspaceState.activeDocument]
 /// (Req 10.5, 11.2, 11.3, 14.1, 14.8, 14.10, 15.2, 15.4).
@@ -74,6 +80,10 @@ class _EditorViewState extends State<EditorView> {
   /// Focus for the editor. Focus is requested when a newly created document
   /// asks for it via [ProjectWorkspaceState.consumeFocusRequest] so a new
   /// document is immediately writable (Req 10.5).
+  ///
+  /// Tab handling is not done here; it is wired through
+  /// [QuillEditorConfig.onKeyPressed] (see [_onEditorKeyPressed]), which
+  /// flutter_quill invokes before its own key handling.
   final FocusNode _editorFocusNode = FocusNode();
 
   /// Scroll controller for the editor's content viewport.
@@ -261,6 +271,14 @@ class _EditorViewState extends State<EditorView> {
           Expanded(child: EditorToolbar(controller: _controller!)),
           const SizedBox(width: 4),
           IconButton(
+            tooltip: 'Export documents',
+            icon: const Icon(
+              Icons.file_download_outlined,
+              color: AppPalette.textSecondary,
+            ),
+            onPressed: () => showExportDialog(context),
+          ),
+          IconButton(
             tooltip: _characterPanelOpen
                 ? 'Hide characters'
                 : 'Show characters',
@@ -393,46 +411,65 @@ class _EditorViewState extends State<EditorView> {
     return Container(
       color: AppPalette.background,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      // Bind Tab at the Shortcuts level so it is resolved *before* the
-      // QuillEditor's own internal key handler (which otherwise inserts a
-      // single '\t'). CallbackShortcuts sits above the editor's focus scope, so
-      // our indent wins. Shift+Tab is intentionally left unbound and keeps its
-      // default behaviour.
-      child: CallbackShortcuts(
-        bindings: <ShortcutActivator, VoidCallback>{
-          const SingleActivator(LogicalKeyboardKey.tab): _insertTabIndent,
-        },
-        child: QuillEditor(
-          controller: _controller!,
-          focusNode: _editorFocusNode,
-          scrollController: _editorScrollController,
-          config: const QuillEditorConfig(
-            placeholder: 'Start writing…',
-            padding: EdgeInsets.zero,
-            expands: true,
-            scrollable: true,
-            autoFocus: false,
-            // Serif body text with double (2.0) line spacing — the Google Docs
-            // standard for manuscripts. Only the styles we want to override are
-            // provided; flutter_quill merges these over its defaults.
-            customStyles: _editorStyles,
-          ),
+      child: QuillEditor(
+        controller: _controller!,
+        focusNode: _editorFocusNode,
+        scrollController: _editorScrollController,
+        config: QuillEditorConfig(
+          placeholder: 'Start writing…',
+          padding: EdgeInsets.zero,
+          expands: true,
+          scrollable: true,
+          autoFocus: false,
+          // Hard-wire Tab to insert our fixed 10-wide indent. flutter_quill
+          // calls [onKeyPressed] *before* its own internal Tab handling (which
+          // would otherwise insert a single '\t' or indent a list); returning a
+          // non-null result here short-circuits that, so our indent always
+          // wins on every platform, including web.
+          onKeyPressed: _onEditorKeyPressed,
+          // Serif body text with double (2.0) line spacing — the Google Docs
+          // standard for manuscripts. Only the styles we want to override are
+          // provided; flutter_quill merges these over its defaults.
+          customStyles: _editorStyles,
         ),
       ),
     );
   }
 
+  /// flutter_quill's pre-handler hook, wired via [QuillEditorConfig.onKeyPressed]
+  /// and invoked before the editor's built-in key handling. On a Tab key-down
+  /// (without Shift) it inserts the fixed 10-wide indent and returns
+  /// [KeyEventResult.handled] so the editor's default Tab behaviour is skipped.
+  /// Every other key returns `null`, letting the editor handle it normally.
+  KeyEventResult? _onEditorKeyPressed(KeyEvent event, Node? node) {
+    if (event is! KeyDownEvent && event is! KeyRepeatEvent) return null;
+    if (event.logicalKey != LogicalKeyboardKey.tab) return null;
+    // Leave Shift+Tab to the default (outdent) behaviour.
+    if (HardwareKeyboard.instance.isShiftPressed) return null;
+
+    _insertTabIndent();
+    return KeyEventResult.handled;
+  }
+
   /// The number of spaces one Tab press inserts (the indent width).
   static const int _tabWidth = 10;
 
-  /// The literal text a Tab press inserts: [_tabWidth] spaces.
-  static final String _tabIndent = ' ' * _tabWidth;
+  /// The literal text a Tab press inserts: [_tabWidth] no-break spaces
+  /// (U+00A0).
+  ///
+  /// Plain ASCII spaces are NOT used because the document body is persisted as
+  /// Markdown: on save/reload, Markdown collapses runs of spaces and turns four
+  /// or more leading spaces into a code block, so an ASCII-space indent would
+  /// visibly disappear or turn into monospaced code after autosave. No-break
+  /// spaces are ordinary text to the Markdown codec, so the 10-wide indent
+  /// round-trips intact and renders as a real indent in the editor and exports.
+  static final String _tabIndent = '\u00A0' * _tabWidth;
 
-  /// Inserts [_tabWidth] spaces at the current selection (replacing any
-  /// selected text) and places the caret after the indent. Bound to the Tab key
-  /// via [CallbackShortcuts] so it runs before the editor's default Tab
-  /// handling; the edit goes through the normal local-edit path so it is
-  /// captured, saved, and Markdown-encoded.
+  /// Inserts [_tabWidth] no-break spaces at the current selection (replacing any
+  /// selected text) and places the caret after the indent. Invoked from
+  /// [_onEditorKey] on Tab so it runs before the editor's default Tab handling;
+  /// the edit goes through the normal local-edit path so it is captured, saved,
+  /// and Markdown-encoded.
   void _insertTabIndent() {
     final QuillController? controller = _controller;
     if (controller == null) return;
@@ -551,3 +588,4 @@ class _EditorViewState extends State<EditorView> {
     ),
   );
 }
+

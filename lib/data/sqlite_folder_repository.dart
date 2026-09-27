@@ -48,7 +48,8 @@ class SqliteFolderRepository implements FolderRepository {
       _foldersTable,
       where: '${FolderColumns.projectId} = ?',
       whereArgs: <Object?>[projectId],
-      orderBy: '${FolderColumns.modifiedAt} DESC, ${FolderColumns.name} ASC',
+      orderBy: '${FolderColumns.position} ASC, '
+          '${FolderColumns.modifiedAt} DESC, ${FolderColumns.name} ASC',
     );
     return rows.map(Folder.fromRow).toList(growable: false);
   }
@@ -90,6 +91,24 @@ class SqliteFolderRepository implements FolderRepository {
       where: '${FolderColumns.id} = ?',
       whereArgs: <Object?>[folder.id],
     );
+  }
+
+  /// Persists the `position` of each of [folders] in a single transaction, so a
+  /// drag-and-drop reorder of the folder list is applied all-or-nothing. Each
+  /// folder's full row is written via [Folder.toRow]; only the id is used in
+  /// the `WHERE`.
+  @override
+  Future<void> updatePositions(List<Folder> folders) async {
+    await _db.transaction((Transaction txn) async {
+      for (final Folder folder in folders) {
+        await txn.update(
+          _foldersTable,
+          folder.toRow(),
+          where: '${FolderColumns.id} = ?',
+          whereArgs: <Object?>[folder.id],
+        );
+      }
+    });
   }
 
   /// Removes the folder identified by [id] **and all documents it contains**,

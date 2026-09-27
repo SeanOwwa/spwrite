@@ -44,7 +44,6 @@ class CharacterEditView extends StatefulWidget {
 class _CharacterEditViewState extends State<CharacterEditView> {
   late final TextEditingController _nameController;
   late final TextEditingController _roleController;
-  late final TextEditingController _summaryController;
   late final TextEditingController _notesController;
 
   /// The working copy of the portrait image bytes, or `null` when none is set.
@@ -59,7 +58,6 @@ class _CharacterEditViewState extends State<CharacterEditView> {
     super.initState();
     _nameController = TextEditingController(text: widget.character.name);
     _roleController = TextEditingController(text: widget.character.role);
-    _summaryController = TextEditingController(text: widget.character.summary);
     _notesController = TextEditingController(text: widget.character.notes);
     _imageBytes = widget.character.image;
   }
@@ -68,7 +66,6 @@ class _CharacterEditViewState extends State<CharacterEditView> {
   void dispose() {
     _nameController.dispose();
     _roleController.dispose();
-    _summaryController.dispose();
     _notesController.dispose();
     super.dispose();
   }
@@ -111,7 +108,6 @@ class _CharacterEditViewState extends State<CharacterEditView> {
     final Character edited = widget.character.copyWith(
       name: _nameController.text.trim(),
       role: _roleController.text.trim(),
-      summary: _summaryController.text.trim(),
       notes: _notesController.text,
       image: _imageBytes,
       clearImage: _imageBytes == null,
@@ -180,15 +176,7 @@ class _CharacterEditViewState extends State<CharacterEditView> {
                 ),
                 const SizedBox(height: 16),
                 _buildField(
-                  label: 'Summary',
-                  controller: _summaryController,
-                  hint: 'A one-line description shown in the list',
-                  maxLength: Character.maxSummaryLength,
-                  maxLines: 2,
-                ),
-                const SizedBox(height: 16),
-                _buildField(
-                  label: 'Notes',
+                  label: 'Details',
                   controller: _notesController,
                   hint: 'Backstory, appearance, relationships, arc…',
                   maxLength: Character.maxNotesLength,
