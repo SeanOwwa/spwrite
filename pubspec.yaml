@@ -1,0 +1,47 @@
+name: writing_app
+description: "Spwrite — a cross-platform writing app with a project/folder/document sidebar, WYSIWYG editor, and local SQLite persistence."
+publish_to: "none"
+version: 1.0.0+1
+
+environment:
+  sdk: ">=3.4.0 <4.0.0"
+  flutter: ">=3.22.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # SQLite persistence (mobile: iOS, Android, macOS via the plugin).
+  sqflite: 2.4.4
+  # SQLite via FFI for desktop (macOS, Windows, Linux) and for running the
+  # store tests on the dev machine using the in-memory factory.
+  sqflite_common_ffi: 2.4.3
+  # Bundles the native sqlite3 library through pub for Windows/Linux desktop
+  # builds, so no system libsqlite3 install is required (minimal-toolchain, Req 9.6).
+  sqlite3_flutter_libs: 0.5.24
+  # Per-platform writable directory resolution for the desktop database file.
+  path_provider: 2.1.6
+  # ChangeNotifier-based state management (single small pub dependency).
+  provider: 6.1.5+1
+  # Unique document identifiers (UUID v4).
+  uuid: 4.6.0
+  sqflite_common_ffi_web: ^1.0.1+2
+  flutter_quill: 11.6.0
+  markdown_quill: 4.3.0
+  markdown: 7.3.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  integration_test:
+    sdk: flutter
+  # Property-based testing library (published on pub.dev as `kiri_check`).
+  kiri_check: 1.3.1
+  # Test primitives (test(), expect(), group()) imported directly by the
+  # property/unit test files; declared explicitly since it is used directly.
+  test: any
+  # Recommended Flutter lint set referenced by analysis_options.yaml (pinned).
+  flutter_lints: 6.0.0
+
+flutter:
+  uses-material-design: true
