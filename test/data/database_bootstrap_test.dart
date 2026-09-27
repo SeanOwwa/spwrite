@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
-import 'package:writing_app/data/database_provider.dart';
+import 'package:spwrite/data/database_provider.dart';
 
 void main() {
   setUpAll(() {

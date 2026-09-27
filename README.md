@@ -1,132 +1,197 @@
 # Spwrite
 
-Spwrite is a cross-platform writing app for organizing your work into
-**projects**, **folders**, and **documents**, with a distraction-free
-WYSIWYG editor. Everything is stored locally with SQLite, so your writing
-lives on your own machine (or in the browser's storage on web) and stays
-available offline.
+A calm, distraction-free writing app for your own computer. Organize your work
+into **projects**, **folders**, and **documents**, and write in a clean editor
+that looks like a manuscript. Everything is saved on your machine (or in your
+browser on the web), so your writing is always with you and works offline.
 
-## Features
+## What it looks like
 
-- **Project dashboard** — create, rename, delete, and open projects from a
-  single landing screen.
-- **Folders and documents** — organize each project into an expandable folder
-  tree with root-level documents, and reorder them by recent activity.
-- **Rich text editor** — a `flutter_quill` WYSIWYG editor with bold, italic,
-  headings, ordered/unordered lists, and links, stored as Markdown.
-- **Autosave** — edits are debounced and persisted automatically.
-- **Dark theme** — a single dark palette applied across every surface.
-- **Local persistence** — native SQLite on desktop/mobile and IndexedDB-backed
-  WASM SQLite on the web.
+- **Serif text, double-spaced.** The editor uses a classic serif typeface with
+  2.0 (double) line spacing — the same standard as a Google Docs manuscript —
+  so your drafts are easy on the eyes and easy to mark up.
+- **Live word count.** A running word count sits in the upper-right corner of
+  the document, updating as you type.
+- **Deep navy theme.** A dark, navy-blue workspace with dark-cyan highlights,
+  designed to be gentle for long writing sessions.
 
-## Platforms
+## What you can do
 
-macOS, Linux, Windows, Web, iOS, and Android. The install scripts below cover
-macOS, Linux, Windows, and Web.
+- Keep separate **projects** for different books, articles, or clients.
+- Sort each project into **folders** and **documents**.
+- Format as you write — bold, italic, headings, lists, and links.
+- **Tab to indent.** Pressing Tab drops a clean 10-space indent wherever your
+  cursor is.
+- **Character Panel.** Keep your cast close while you write. Open it from the
+  people icon on the right of the editor toolbar to see a scrollable list of
+  your characters. Each one has a name, role, a short summary, longer notes, and
+  a portrait image. Tap "See more" to read a character's full details right in
+  the sidebar, or open one to edit it on its own screen.
+- **Autosave.** Your work saves itself as you go; there is no Save button to
+  remember.
 
-## Developers
+---
 
-- **Seanless** — product direction, requirements, and review.
-- **Kiro** — implementation, tests, and tooling.
+## Getting started
 
-## Requirements
+You do not need to be technical to install Spwrite. Follow the section for your
+computer below. The first time you run it, the installer downloads what it needs
+and builds the app — this can take a few minutes. After that it is quick.
 
-- [Flutter SDK](https://docs.flutter.dev/get-started/install) 3.22 or newer
-  (Dart 3.4+). The install scripts check for this and tell you how to get it if
-  it is missing.
-- For **web**: Google Chrome.
-- For **desktop**: the platform toolchain (Xcode on macOS, the C/C++ build
-  tools + GTK on Linux, Visual Studio with the "Desktop development with C++"
-  workload on Windows).
+### Before you begin (one-time)
 
-## Installation
+Spwrite is built with a free tool called **Flutter**. If you do not already have
+it, the installer will stop and give you a link to install it. You can install
+it ahead of time from the
+[Flutter install guide](https://docs.flutter.dev/get-started/install).
 
-The repo ships with one-shot install scripts under `scripts/`. Each script
-**installs all build/runtime dependencies** (`flutter pub get`, plus the SQLite
-WASM assets for web) and then **builds and launches** the app.
+- **To use Spwrite in a web browser**, you also need **Google Chrome**.
+- **To get a desktop app** (an icon you double-click), you need your system's
+  developer tools: **Xcode** on Mac, **Visual Studio** with "Desktop
+  development with C++" on Windows, or the **C/C++ build tools and GTK** on
+  Linux. The Flutter install guide walks you through this.
 
-Every script takes two optional arguments:
+---
 
-| Argument | Values | Default | Meaning |
-| --- | --- | --- | --- |
-| `PLATFORM` | `web`, `macos`, `linux`, `windows` | `web` | which target to install/run |
-| `MODE` | `now`, `background` | `now` | run in this terminal, or detached in the background |
+### Mac and Linux
 
-- **`now`** runs the app in the **foreground of the current terminal** (press
-  `Ctrl+C` to stop). Good for a quick launch where you want to see the output.
-- **`background`** launches the app **detached from the terminal**. Output is
-  written to `writepad-<platform>.log` and the process id to
-  `writepad-<platform>.pid` in the project root, so you can keep using the same
-  shell.
+1. Open the **Terminal** app.
+2. Go to the Spwrite folder. If it is on your Desktop, type:
+   ```bash
+   cd ~/Desktop/spwrite
+   ```
+3. The first time only, make the installer runnable:
+   ```bash
+   chmod +x scripts/install.sh
+   ```
+4. Run the installer. Pick one of these:
 
-### macOS / Linux / Web
+   **Open in a web browser (simplest):**
+   ```bash
+   ./scripts/install.sh web
+   ```
+   When it finishes it prints a link like `http://localhost:8080`. Open that in
+   Chrome to start writing.
 
-```bash
-# From the project root:
-chmod +x scripts/install.sh          # first time only
+   **Build a Mac desktop app:**
+   ```bash
+   ./scripts/install.sh macos
+   ```
 
-# Web, in this terminal (default):
-./scripts/install.sh
-# equivalent to: ./scripts/install.sh web now
+   **Build a Linux desktop app:**
+   ```bash
+   ./scripts/install.sh linux
+   ```
 
-# Web, in the background:
-./scripts/install.sh web background
+When a desktop build finishes, the installer prints the exact location of your
+finished app so you can double-click it or drag it to your Desktop or
+Applications folder.
 
-# macOS desktop, foreground / background:
-./scripts/install.sh macos now
-./scripts/install.sh macos background
-
-# Linux desktop:
-./scripts/install.sh linux now
-```
-
-For web you can override the port: `WEB_PORT=9000 ./scripts/install.sh web now`,
-then open `http://localhost:9000`.
+---
 
 ### Windows
 
-Run from **PowerShell** in the project root:
+1. Open **PowerShell** (search for it in the Start menu).
+2. Go to the Spwrite folder. If it is on your Desktop, type:
+   ```powershell
+   cd $HOME\Desktop\spwrite
+   ```
+3. Run the installer. Pick one of these:
 
+   **Open in a web browser (simplest):**
+   ```powershell
+   .\scripts\install.ps1 web
+   ```
+   When it finishes it prints a link like `http://localhost:8080`. Open that in
+   Chrome to start writing.
+
+   **Build a Windows desktop app:**
+   ```powershell
+   .\scripts\install.ps1 windows
+   ```
+   When it finishes, the installer prints where your `.exe` app is. Double-click
+   it, or copy the whole `Release` folder to your Desktop.
+
+> If PowerShell refuses to run the script, paste this line first, then try
+> again (it only affects the current window):
+> ```powershell
+> Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+> ```
+
+---
+
+## Handy extras
+
+**Keep the terminal free while it runs.** Add the word `background` and the app
+runs on its own, writing its messages to a log file instead of your terminal:
+
+```bash
+./scripts/install.sh web background      # Mac / Linux
+```
 ```powershell
-# Web, in this terminal (default):
-.\scripts\install.ps1
-# equivalent to: .\scripts\install.ps1 web now
-
-# Web, in the background:
-.\scripts\install.ps1 web background
-
-# Windows desktop, foreground / background:
-.\scripts\install.ps1 windows now
-.\scripts\install.ps1 windows background
+.\scripts\install.ps1 web background     # Windows
 ```
 
-Override the web port with `-WebPort`:
-`.\scripts\install.ps1 web now -WebPort 9000`.
+To stop a background run later:
 
-> If PowerShell blocks the script, allow it for the current session with:
-> `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass`.
+- **Mac / Linux:** `kill $(cat spwrite-web.pid)`
+- **Windows:** `Stop-Process -Id (Get-Content spwrite-web.pid)`
 
-### Stopping a background run
+**Use a different web address/port.** By default the web version opens on port
+`8080`. To change it:
 
-- **macOS / Linux:** `kill $(cat writepad-<platform>.pid)`
-- **Windows (PowerShell):** `Stop-Process -Id (Get-Content writepad-<platform>.pid)`
+```bash
+WEB_PORT=9000 ./scripts/install.sh web           # Mac / Linux
+```
+```powershell
+.\scripts\install.ps1 web -WebPort 9000          # Windows
+```
 
-## Manual setup (without the scripts)
+**The two options at a glance:**
+
+| Word you add | What it does |
+| --- | --- |
+| `web` | Runs Spwrite in Chrome |
+| `macos` / `linux` / `windows` | Builds a double-clickable desktop app |
+| `now` (default) | Runs in the current terminal window |
+| `background` | Runs quietly on its own |
+
+You can combine a platform and a mode, e.g. `./scripts/install.sh macos now` or
+`.\scripts\install.ps1 windows background`.
+
+---
+
+## For developers
+
+<details>
+<summary>Manual setup and tests (click to expand)</summary>
+
+The installer scripts wrap the standard Flutter workflow:
 
 ```bash
 flutter pub get
 # Web only — generate the SQLite WASM worker + binary:
 dart run sqflite_common_ffi_web:setup
-# Run:
-flutter run -d chrome        # web
-flutter run -d macos         # macOS
-flutter run -d linux         # Linux
-flutter run -d windows       # Windows
+# Run in debug:
+flutter run -d chrome     # web
+flutter run -d macos      # macOS
+flutter run -d linux      # Linux
+flutter run -d windows    # Windows
 ```
 
-## Running the tests
+Checks and tests:
 
 ```bash
 flutter analyze
 flutter test
 ```
+
+Persistence is native SQLite on desktop/mobile and IndexedDB-backed WASM SQLite
+on the web. The UI applies a single dark navy theme from `lib/theme/app_theme.dart`.
+
+</details>
+
+## Credits
+
+- **Seanless** — product direction, requirements, and review.
+- **Kiro** — implementation, tests, and tooling.

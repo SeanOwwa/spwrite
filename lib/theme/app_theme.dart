@@ -63,50 +63,70 @@ class AppPalette {
   const AppPalette._();
 
   // --- Backgrounds / surfaces --------------------------------------------
+  //
+  // The surfaces are tinted toward navy so the whole app reads as a deep
+  // dark-blue workspace rather than neutral grey (Req 8.5).
 
-  /// The base app background — the darkest surface (Req 8.5).
-  static const Color background = Color(0xFF121212);
+  /// The base app background — the darkest navy surface (Req 8.5).
+  static const Color background = Color(0xFF0A0F1E);
 
-  /// Raised surface (cards, the Sidebar, dialogs) sitting above [background].
-  static const Color surface = Color(0xFF1E1E1E);
+  /// Raised surface (cards, the Sidebar, dialogs) sitting above [background]:
+  /// a dark navy blue.
+  static const Color surface = Color(0xFF111A30);
 
-  /// A slightly lighter surface used for selected rows, input fills, and the
-  /// active-document highlight.
-  static const Color surfaceVariant = Color(0xFF2A2A2A);
+  /// A slightly lighter navy surface used for selected rows, input fills, and
+  /// the active-document highlight.
+  static const Color surfaceVariant = Color(0xFF1B274A);
 
   // --- Foreground text ----------------------------------------------------
 
-  /// Primary text: high-emphasis body and titles.
+  /// Primary text: high-emphasis body and titles. A near-white with a faint
+  /// cool tint so it sits naturally over the navy surfaces.
   ///
-  /// Contrast: 15.86:1 on [background], 14.11:1 on [surface], 12.15:1 on
+  /// Contrast: 16.59:1 on [background], 15.02:1 on [surface], 12.71:1 on
   /// [surfaceVariant] — all well above the 4.5:1 normal-text threshold.
-  static const Color textPrimary = Color(0xFFECECEC);
+  static const Color textPrimary = Color(0xFFECEFF6);
 
   /// Secondary text: medium-emphasis labels, captions, and hints.
   ///
-  /// Contrast: 9.34:1 on [background], 8.31:1 on [surface], 7.16:1 on
+  /// Contrast: 10.45:1 on [background], 9.47:1 on [surface], 8.01:1 on
   /// [surfaceVariant] — all above the 4.5:1 normal-text threshold.
-  static const Color textSecondary = Color(0xFFB7B7B7);
+  static const Color textSecondary = Color(0xFFB6C0D6);
 
   /// Disabled / lowest-emphasis text. Reserved for large text only (>= 24 px,
   /// or bold >= 18.66 px), where the 3:1 threshold applies.
   ///
-  /// Contrast: 5.43:1 on [background], 4.83:1 on [surface] — above the 3:1
+  /// Contrast: 6.28:1 on [background], 5.69:1 on [surface] — above the 3:1
   /// large-text threshold.
-  static const Color textDisabled = Color(0xFF8A8A8A);
+  static const Color textDisabled = Color(0xFF8894B0);
 
   // --- Accent / semantic --------------------------------------------------
 
-  /// Primary accent for interactive controls (buttons, links, focus rings).
+  /// Primary accent for interactive controls (buttons, links, focus rings):
+  /// a bright dark-blue that reads clearly on the navy surfaces.
   ///
-  /// Contrast: 8.16:1 on [background], 7.26:1 on [surface] as text/icon color;
+  /// Contrast: 8.00:1 on [background], 7.25:1 on [surface] as text/icon color;
   /// above the 4.5:1 normal-text threshold.
-  static const Color primary = Color(0xFF82AAFF);
+  static const Color primary = Color(0xFF7FA6FF);
 
-  /// Foreground drawn on top of [primary] (e.g. filled-button label).
+  /// Foreground drawn on top of [primary] (e.g. filled-button label): a very
+  /// dark navy.
   ///
-  /// Contrast: 7.57:1 on [primary] — above the 4.5:1 normal-text threshold.
-  static const Color onPrimary = Color(0xFF0A1A33);
+  /// Contrast: 7.91:1 on [primary] — above the 4.5:1 normal-text threshold.
+  static const Color onPrimary = Color(0xFF0A1024);
+
+  /// Secondary accent: a dark-cyan used for secondary controls, toggles, and
+  /// highlights so the UI has a second hue alongside the navy blue.
+  ///
+  /// Contrast: 11.01:1 on [background], 9.97:1 on [surface] as text/icon
+  /// color; above the 4.5:1 normal-text threshold.
+  static const Color secondary = Color(0xFF3FD8E0);
+
+  /// Foreground drawn on top of [secondary] (e.g. a filled secondary control):
+  /// a very dark teal.
+  ///
+  /// Contrast: 9.62:1 on [secondary] — above the 4.5:1 normal-text threshold.
+  static const Color onSecondary = Color(0xFF042224);
 
   /// Error accent for validation messages and destructive actions.
   ///
@@ -136,6 +156,8 @@ class AppPalette {
     textDisabled,
     primary,
     onPrimary,
+    secondary,
+    onSecondary,
     error,
     onError,
     outline,
@@ -216,6 +238,26 @@ class AppPalette {
       background: primary,
       sizeClass: TextSizeClass.normal,
     ),
+    // Secondary (dark-cyan) accent used as text/icon color.
+    TextColorPair(
+      label: 'secondary on background',
+      foreground: secondary,
+      background: background,
+      sizeClass: TextSizeClass.normal,
+    ),
+    TextColorPair(
+      label: 'secondary on surface',
+      foreground: secondary,
+      background: surface,
+      sizeClass: TextSizeClass.normal,
+    ),
+    // Foreground on the secondary accent (filled secondary controls).
+    TextColorPair(
+      label: 'onSecondary on secondary',
+      foreground: onSecondary,
+      background: secondary,
+      sizeClass: TextSizeClass.normal,
+    ),
     // Error accent as text over surfaces.
     TextColorPair(
       label: 'error on background',
@@ -265,14 +307,14 @@ class AppTheme {
     onPrimary: AppPalette.onPrimary,
     primaryContainer: AppPalette.surfaceVariant,
     onPrimaryContainer: AppPalette.textPrimary,
-    // Secondary reuses the accent (single-accent palette).
-    secondary: AppPalette.primary,
-    onSecondary: AppPalette.onPrimary,
+    // Secondary is the dark-cyan accent (the palette's second hue).
+    secondary: AppPalette.secondary,
+    onSecondary: AppPalette.onSecondary,
     secondaryContainer: AppPalette.surfaceVariant,
     onSecondaryContainer: AppPalette.textPrimary,
-    // Tertiary also reuses the accent so no third hue is introduced.
-    tertiary: AppPalette.primary,
-    onTertiary: AppPalette.onPrimary,
+    // Tertiary reuses the dark-cyan accent so no fourth hue is introduced.
+    tertiary: AppPalette.secondary,
+    onTertiary: AppPalette.onSecondary,
     tertiaryContainer: AppPalette.surfaceVariant,
     onTertiaryContainer: AppPalette.textPrimary,
     // Error family.

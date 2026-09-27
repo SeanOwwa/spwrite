@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:writing_app/domain/document.dart';
+import 'package:spwrite/domain/document.dart';
 
 void main() {
   group('Document.newDocument', () {

@@ -21,14 +21,14 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kiri_check/kiri_check.dart';
-import 'package:writing_app/domain/document.dart';
-import 'package:writing_app/domain/document_repository.dart';
-import 'package:writing_app/domain/folder.dart';
-import 'package:writing_app/domain/folder_repository.dart';
-import 'package:writing_app/domain/project.dart';
-import 'package:writing_app/domain/project_repository.dart';
-import 'package:writing_app/state/app_navigation_state.dart';
-import 'package:writing_app/state/project_workspace_state.dart';
+import 'package:spwrite/domain/document.dart';
+import 'package:spwrite/domain/document_repository.dart';
+import 'package:spwrite/domain/folder.dart';
+import 'package:spwrite/domain/folder_repository.dart';
+import 'package:spwrite/domain/project.dart';
+import 'package:spwrite/domain/project_repository.dart';
+import 'package:spwrite/state/app_navigation_state.dart';
+import 'package:spwrite/state/project_workspace_state.dart';
 
 /// A Map-backed [ProjectRepository] whose [create] records the entity so the
 /// test can inspect every id and timestamp it produced. Reads/updates are

@@ -32,6 +32,9 @@ enum DeleteTargetKind {
 
   /// A Document. Only the Document itself is removed (Req 13.1).
   document,
+
+  /// A Character. Only the Character itself is removed.
+  character,
 }
 
 /// A modal confirm / cancel dialog for deleting a Project, Folder, or Document
@@ -102,6 +105,13 @@ class DeleteConfirmationDialog extends StatelessWidget {
   }) =>
       show(context, kind: DeleteTargetKind.document, name: documentTitle);
 
+  /// Confirms deletion of the Character named [characterName].
+  static Future<bool> showForCharacter(
+    BuildContext context, {
+    required String characterName,
+  }) =>
+      show(context, kind: DeleteTargetKind.character, name: characterName);
+
   /// The dialog title for each target kind.
   String get _dialogTitle {
     switch (kind) {
@@ -111,6 +121,8 @@ class DeleteConfirmationDialog extends StatelessWidget {
         return 'Delete folder?';
       case DeleteTargetKind.document:
         return 'Delete document?';
+      case DeleteTargetKind.character:
+        return 'Delete character?';
     }
   }
 
@@ -131,6 +143,9 @@ class DeleteConfirmationDialog extends StatelessWidget {
             'documents it contains. This action cannot be undone.';
       case DeleteTargetKind.document:
         // Req 13.1: name the Document alone.
+        return 'This will permanently delete "$shownName". This action cannot '
+            'be undone.';
+      case DeleteTargetKind.character:
         return 'This will permanently delete "$shownName". This action cannot '
             'be undone.';
     }

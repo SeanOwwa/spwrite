@@ -14,7 +14,7 @@
 
 import 'package:kiri_check/kiri_check.dart';
 import 'package:test/test.dart';
-import 'package:writing_app/domain/project.dart';
+import 'package:spwrite/domain/project.dart';
 
 void main() {
   // A pool of names chosen to force case-insensitive tie-breaking and

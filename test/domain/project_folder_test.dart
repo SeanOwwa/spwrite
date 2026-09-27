@@ -8,8 +8,8 @@
 // _Requirements: 2.2, 7.2, 17.1, 17.2_
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:writing_app/domain/folder.dart';
-import 'package:writing_app/domain/project.dart';
+import 'package:spwrite/domain/folder.dart';
+import 'package:spwrite/domain/project.dart';
 
 void main() {
   group('Project.create defaults', () {

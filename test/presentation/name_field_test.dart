@@ -9,7 +9,7 @@ library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:writing_app/presentation/name_field.dart';
+import 'package:spwrite/presentation/name_field.dart';
 
 /// Pumps a [NameField] wrapped in the minimal MaterialApp scaffolding it needs.
 Future<void> _pumpField(

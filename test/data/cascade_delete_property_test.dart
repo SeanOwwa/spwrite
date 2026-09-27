@@ -31,13 +31,13 @@ import 'package:kiri_check/kiri_check.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:test/test.dart';
 
-import 'package:writing_app/data/database_provider.dart';
-import 'package:writing_app/data/sqlite_document_repository.dart';
-import 'package:writing_app/data/sqlite_folder_repository.dart';
-import 'package:writing_app/data/sqlite_project_repository.dart';
-import 'package:writing_app/domain/document.dart';
-import 'package:writing_app/domain/folder.dart';
-import 'package:writing_app/domain/project.dart';
+import 'package:spwrite/data/database_provider.dart';
+import 'package:spwrite/data/sqlite_document_repository.dart';
+import 'package:spwrite/data/sqlite_folder_repository.dart';
+import 'package:spwrite/data/sqlite_project_repository.dart';
+import 'package:spwrite/domain/document.dart';
+import 'package:spwrite/domain/folder.dart';
+import 'package:spwrite/domain/project.dart';
 
 // ---------------------------------------------------------------------------
 // Generation specs

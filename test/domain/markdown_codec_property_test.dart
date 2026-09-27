@@ -28,7 +28,7 @@
 
 import 'package:kiri_check/kiri_check.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:writing_app/domain/markdown_document_codec.dart';
+import 'package:spwrite/domain/markdown_document_codec.dart';
 
 void main() {
   // Representative snippets covering each supported formatting construct.

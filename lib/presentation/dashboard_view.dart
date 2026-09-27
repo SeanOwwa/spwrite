@@ -177,6 +177,25 @@ class _DashboardViewState extends State<DashboardView> {
       padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
       child: Row(
         children: <Widget>[
+          // Spwrite brand mark on the landing screen. The source art has a
+          // white margin, so it sits on a white rounded tile and is shown in
+          // full (contain) rather than cropped.
+          Container(
+            width: 40,
+            height: 40,
+            clipBehavior: Clip.antiAlias,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            padding: const EdgeInsets.all(2),
+            child: Image.asset(
+              'assets/images/spwrite_logo.png',
+              fit: BoxFit.contain,
+              semanticLabel: 'Spwrite logo',
+            ),
+          ),
+          const SizedBox(width: 12),
           const Expanded(
             child: Text(
               'Projects',
@@ -200,13 +219,36 @@ class _DashboardViewState extends State<DashboardView> {
   /// The centered empty-state message shown when there are zero projects,
   /// prompting the user to create one (Req 1.3).
   Widget _buildEmptyState() {
-    return const Center(
+    return Center(
       child: Padding(
-        padding: EdgeInsets.symmetric(horizontal: 24),
-        child: Text(
-          'No projects yet. Create one to get started.',
-          textAlign: TextAlign.center,
-          style: TextStyle(color: AppPalette.textSecondary),
+        padding: const EdgeInsets.symmetric(horizontal: 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            // Spwrite brand mark, shown on a white rounded tile because the
+            // logo art is drawn for a light background.
+            Container(
+              width: 140,
+              height: 140,
+              clipBehavior: Clip.antiAlias,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(24),
+              ),
+              padding: const EdgeInsets.all(8),
+              child: Image.asset(
+                'assets/images/spwrite_logo.png',
+                fit: BoxFit.contain,
+                semanticLabel: 'Spwrite logo',
+              ),
+            ),
+            const SizedBox(height: 20),
+            const Text(
+              'No projects yet. Create one to get started.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: AppPalette.textSecondary),
+            ),
+          ],
         ),
       ),
     );

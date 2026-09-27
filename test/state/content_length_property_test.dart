@@ -31,14 +31,14 @@ import 'package:flutter_quill/quill_delta.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kiri_check/kiri_check.dart';
 
-import 'package:writing_app/domain/document.dart';
-import 'package:writing_app/domain/document_repository.dart';
-import 'package:writing_app/domain/folder.dart';
-import 'package:writing_app/domain/folder_repository.dart';
-import 'package:writing_app/domain/markdown_document_codec.dart';
-import 'package:writing_app/domain/project.dart';
-import 'package:writing_app/state/autosave_debouncer.dart';
-import 'package:writing_app/state/project_workspace_state.dart';
+import 'package:spwrite/domain/document.dart';
+import 'package:spwrite/domain/document_repository.dart';
+import 'package:spwrite/domain/folder.dart';
+import 'package:spwrite/domain/folder_repository.dart';
+import 'package:spwrite/domain/markdown_document_codec.dart';
+import 'package:spwrite/domain/project.dart';
+import 'package:spwrite/state/autosave_debouncer.dart';
+import 'package:spwrite/state/project_workspace_state.dart';
 
 /// A codec whose [deltaToMarkdown] ignores the [Delta] and returns whatever
 /// string was placed in [next] before the call. This lets the test control the

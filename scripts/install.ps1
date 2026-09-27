@@ -72,6 +72,20 @@ switch ($Platform) {
 }
 Write-Step "Build complete."
 
+# Point the user at the finished, standalone artifact.
+switch ($Platform) {
+  'windows' {
+    $exe = Get-ChildItem -Path 'build\windows\x64\runner\Release' -Filter '*.exe' -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($exe) {
+      Write-Step "Your app is ready: $($exe.FullName)"
+      Write-Step "Double-click the .exe, or copy the whole 'Release' folder to your Desktop."
+    }
+  }
+  'web' {
+    if (Test-Path 'build\web') { Write-Step "Your hostable web bundle is ready: $ProjectRoot\build\web" }
+  }
+}
+
 # --- 5. Launch -----------------------------------------------------------
 $runArgs = switch ($Platform) {
   'web'     { @('run', '-d', 'chrome', '--web-port', "$WebPort") }
@@ -79,12 +93,12 @@ $runArgs = switch ($Platform) {
 }
 
 if ($Mode -eq 'background') {
-  $logFile = Join-Path $ProjectRoot "writepad-$Platform.log"
+  $logFile = Join-Path $ProjectRoot "spwrite-$Platform.log"
   Write-Step "Launching $Platform in the background. Logs: $logFile"
   $proc = Start-Process -FilePath 'flutter' -ArgumentList $runArgs `
             -RedirectStandardOutput $logFile -RedirectStandardError "$logFile.err" `
             -WindowStyle Hidden -PassThru
-  $proc.Id | Out-File (Join-Path $ProjectRoot "writepad-$Platform.pid")
+  $proc.Id | Out-File (Join-Path $ProjectRoot "spwrite-$Platform.pid")
   Write-Step "Started (PID $($proc.Id))."
   if ($Platform -eq 'web') { Write-Step "Once compiled, open http://localhost:$WebPort" }
 }

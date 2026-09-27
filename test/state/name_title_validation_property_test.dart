@@ -33,10 +33,10 @@ import 'package:flutter/foundation.dart';
 import 'package:kiri_check/kiri_check.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:test/test.dart';
-import 'package:writing_app/data/database_provider.dart';
-import 'package:writing_app/data/sqlite_project_repository.dart';
-import 'package:writing_app/domain/project.dart';
-import 'package:writing_app/state/app_navigation_state.dart';
+import 'package:spwrite/data/database_provider.dart';
+import 'package:spwrite/data/sqlite_project_repository.dart';
+import 'package:spwrite/domain/project.dart';
+import 'package:spwrite/state/app_navigation_state.dart';
 
 /// A generated candidate: the raw string handed to create/rename, plus the
 /// core length used to build it (equals the trimmed length, since the core is

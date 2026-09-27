@@ -13,7 +13,7 @@
 import 'package:kiri_check/kiri_check.dart';
 import 'package:test/test.dart';
 
-import 'package:writing_app/domain/folder.dart';
+import 'package:spwrite/domain/folder.dart';
 
 /// A single generated folder, described by its name and last-modified
 /// timestamp (in ms since epoch). The projectId and the unique id are assigned

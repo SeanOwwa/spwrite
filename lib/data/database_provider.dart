@@ -14,7 +14,7 @@
 ///   browser rather than as an on-disk file.
 ///
 /// v2 is a fresh start with respect to stored data: the store lives in a new
-/// file ([databaseFileName] == `writing_app_v2.db`) and the schema is the
+/// file ([databaseFileName] == `spwrite_v2.db`) and the schema is the
 /// three-table Project → Folder → Document relational model. No v1 data is
 /// migrated.
 library;
@@ -23,6 +23,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:sqflite_common_ffi_web/sqflite_ffi_web.dart';
 
+import '../domain/character.dart';
 import '../domain/document.dart';
 import '../domain/folder.dart';
 import '../domain/project.dart';
@@ -35,7 +36,7 @@ class DatabaseProvider {
 
   /// The file name of the app's SQLite database. A fresh v2 store — a new file
   /// distinct from any v1 database, so v2 never migrates or touches v1 data.
-  static const String databaseFileName = 'writing_app_v2.db';
+  static const String databaseFileName = 'spwrite_v2.db';
 
   /// The `projects` table name.
   static const String projectsTable = 'projects';
@@ -45,6 +46,9 @@ class DatabaseProvider {
 
   /// The `documents` table name.
   static const String documentsTable = 'documents';
+
+  /// The `characters` table name (project-scoped fictional characters).
+  static const String charactersTable = 'characters';
 
   /// The index backing the Dashboard project ordering (Req 1.2).
   static const String projectsModifiedIndexName = 'idx_projects_modified';
@@ -60,9 +64,18 @@ class DatabaseProvider {
   static const String documentsContainerModifiedIndexName =
       'idx_documents_container_modified';
 
-  /// The current schema version, carried in `PRAGMA user_version`. Bumped to 2
-  /// for the v2 relational schema; there is no migration from v1.
-  static const int schemaVersion = 2;
+  /// The index backing per-project character listing and name ordering.
+  static const String charactersProjectNameIndexName =
+      'idx_characters_project_name';
+
+  /// The current schema version, carried in `PRAGMA user_version`.
+  ///
+  /// - v2: the three-table Project → Folder → Document relational model.
+  /// - v3: adds the project-scoped `characters` table (Character Panel).
+  ///
+  /// Bumping this triggers [openAppDatabase]'s `onUpgrade` so an existing v2
+  /// store gains the new table without losing its projects / documents.
+  static const int schemaVersion = 3;
 
   /// Selects and configures the platform-appropriate `DatabaseFactory`.
   ///
@@ -120,6 +133,14 @@ class DatabaseProvider {
       onCreate: (Database db, int version) async {
         await _createSchema(db);
       },
+      onUpgrade: (Database db, int oldVersion, int newVersion) async {
+        // v2 -> v3: add the project-scoped characters table. Guarded with
+        // IF NOT EXISTS so re-running is harmless. Existing projects, folders,
+        // and documents are untouched.
+        if (oldVersion < 3) {
+          await _createCharactersTable(db);
+        }
+      },
       onConfigure: (Database db) async {
         // The web (WASM) factory rejects this PRAGMA during open. On native
         // factories it is a harmless safeguard; the app additionally enforces
@@ -129,6 +150,15 @@ class DatabaseProvider {
         if (!kIsWeb) {
           await db.execute('PRAGMA foreign_keys = ON');
         }
+      },
+      onOpen: (Database db) async {
+        // Safety net for the v3 characters table: `onUpgrade` handles the
+        // v2 -> v3 migration on native, but the web (WASM/IndexedDB) factory
+        // does not always run version-upgrade callbacks reliably. Because the
+        // table creation is idempotent (`IF NOT EXISTS`), ensuring it here on
+        // every open guarantees the Character Panel has its table on both fresh
+        // and pre-existing databases, on every platform.
+        await _createCharactersTable(db);
       },
     );
   }
@@ -223,6 +253,45 @@ class DatabaseProvider {
         )
     ''');
 
+    // characters — project-scoped fictional characters (schema v3).
+    await _createCharactersTable(db);
+
     await db.execute('PRAGMA user_version = $schemaVersion');
+  }
+
+  /// Creates the `characters` table and its supporting index if they do not
+  /// already exist. Split out so it can be invoked both by [_createSchema] (on
+  /// a fresh database) and by the v2 -> v3 `onUpgrade` migration (on an
+  /// existing store). Only trusted table/column-name constants are interpolated
+  /// into the SQL.
+  static Future<void> _createCharactersTable(Database db) async {
+    // A character belongs to exactly one project; deleting the project removes
+    // its characters (cascade declared for native; the app does not rely on it
+    // for correctness — the project delete cascade is enforced explicitly in
+    // the repository layer, which is extended to include characters).
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS $charactersTable (
+        ${CharacterColumns.id}          TEXT    PRIMARY KEY NOT NULL,
+        ${CharacterColumns.projectId}   TEXT    NOT NULL,
+        ${CharacterColumns.name}        TEXT    NOT NULL DEFAULT '',
+        ${CharacterColumns.role}        TEXT    NOT NULL DEFAULT '',
+        ${CharacterColumns.summary}     TEXT    NOT NULL DEFAULT '',
+        ${CharacterColumns.notes}       TEXT    NOT NULL DEFAULT '',
+        ${CharacterColumns.image}       BLOB,
+        ${CharacterColumns.createdAt}   INTEGER NOT NULL,
+        ${CharacterColumns.modifiedAt}  INTEGER NOT NULL,
+        FOREIGN KEY (${CharacterColumns.projectId})
+          REFERENCES $projectsTable (${ProjectColumns.id}) ON DELETE CASCADE
+      )
+    ''');
+
+    // Character listing per project, ordered by name.
+    await db.execute('''
+      CREATE INDEX IF NOT EXISTS $charactersProjectNameIndexName
+        ON $charactersTable (
+          ${CharacterColumns.projectId},
+          ${CharacterColumns.name} ASC
+        )
+    ''');
   }
 }

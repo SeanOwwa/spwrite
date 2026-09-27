@@ -14,7 +14,7 @@
 import 'package:kiri_check/kiri_check.dart';
 import 'package:test/test.dart';
 
-import 'package:writing_app/domain/document.dart';
+import 'package:spwrite/domain/document.dart';
 
 /// A single generated document, described by its title and last-modified
 /// timestamp (in ms since epoch). The container (projectId/folderId) and the

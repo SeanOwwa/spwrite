@@ -73,6 +73,34 @@ case "$PLATFORM" in
 esac
 log "Build complete."
 
+# Point the user at the finished, standalone artifact so they can double-click
+# it (desktop) or find the hostable bundle (web) without hunting through build/.
+report_artifact() {
+  case "$PLATFORM" in
+    macos)
+      local app
+      app="$(find build/macos/Build/Products/Release -maxdepth 1 -name '*.app' 2>/dev/null | head -n 1)"
+      if [ -n "${app:-}" ]; then
+        log "Your app is ready: $PROJECT_ROOT/$app"
+        log "Double-click it in Finder, or copy it to /Applications or your Desktop."
+      fi
+      ;;
+    linux)
+      local bundle="build/linux/x64/release/bundle"
+      if [ -d "$bundle" ]; then
+        log "Your app is ready: $PROJECT_ROOT/$bundle/writing_app"
+        log "Run it directly, or copy the whole 'bundle' folder wherever you like."
+      fi
+      ;;
+    web)
+      if [ -d "build/web" ]; then
+        log "Your hostable web bundle is ready: $PROJECT_ROOT/build/web"
+      fi
+      ;;
+  esac
+}
+report_artifact
+
 # --- 5. Launch -----------------------------------------------------------
 run_cmd() {
   case "$PLATFORM" in
@@ -83,12 +111,12 @@ run_cmd() {
 }
 
 if [ "$MODE" = "background" ]; then
-  LOG_FILE="$PROJECT_ROOT/writepad-$PLATFORM.log"
+  LOG_FILE="$PROJECT_ROOT/spwrite-$PLATFORM.log"
   log "Launching $PLATFORM in the background. Logs: $LOG_FILE"
   # nohup + & detaches the process from this terminal session.
   nohup bash -c "$(declare -f run_cmd); PLATFORM='$PLATFORM' WEB_PORT='$WEB_PORT' run_cmd" >"$LOG_FILE" 2>&1 &
-  echo $! > "$PROJECT_ROOT/writepad-$PLATFORM.pid"
-  log "Started (PID $(cat "$PROJECT_ROOT/writepad-$PLATFORM.pid")). Tail logs with: tail -f \"$LOG_FILE\""
+  echo $! > "$PROJECT_ROOT/spwrite-$PLATFORM.pid"
+  log "Started (PID $(cat "$PROJECT_ROOT/spwrite-$PLATFORM.pid")). Tail logs with: tail -f \"$LOG_FILE\""
   [ "$PLATFORM" = "web" ] && log "Once compiled, open http://localhost:$WEB_PORT"
 else
   log "Launching $PLATFORM in this terminal (Ctrl+C to stop)..."

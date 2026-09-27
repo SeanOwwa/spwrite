@@ -76,6 +76,6 @@ app.*.map.json
 .kiro
 
 # Spwrite install-script runtime artifacts (background mode)
-# `*.log` above already covers writepad-*.log; the PID files are added here.
-writepad-*.pid
-writepad-*.log.err
+# `*.log` above already covers spwrite-*.log; the PID files are added here.
+spwrite-*.pid
+spwrite-*.log.err

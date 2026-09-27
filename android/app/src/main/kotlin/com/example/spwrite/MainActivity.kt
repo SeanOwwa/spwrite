@@ -1,4 +1,4 @@
-package com.example.writing_app
+package com.example.spwrite
 
 import io.flutter.embedding.android.FlutterActivity
 

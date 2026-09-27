@@ -1,4 +1,4 @@
-name: writing_app
+name: spwrite
 description: "Spwrite — a cross-platform writing app with a project/folder/document sidebar, WYSIWYG editor, and local SQLite persistence."
 publish_to: "none"
 version: 1.0.0+1
@@ -29,6 +29,9 @@ dependencies:
   flutter_quill: 11.6.0
   markdown_quill: 4.3.0
   markdown: 7.3.1
+  # Cross-platform image selection for character portraits (web, desktop,
+  # mobile). Returns bytes, which are stored with the character in SQLite.
+  image_picker: ^1.1.2
 
 dev_dependencies:
   flutter_test:
@@ -42,6 +45,49 @@ dev_dependencies:
   test: any
   # Recommended Flutter lint set referenced by analysis_options.yaml (pinned).
   flutter_lints: 6.0.0
+  # Generates native launcher icons for every platform from the Spwrite logo.
+  flutter_launcher_icons: ^0.14.4
+
+# Native launcher-icon generation. Run `dart run flutter_launcher_icons` after
+# changing the source image to regenerate icons for all platforms from the
+# Spwrite logo.
+flutter_launcher_icons:
+  image_path: "assets/images/spwrite_logo.png"
+  # Mobile
+  android: true
+  adaptive_icon_background: "#FFFFFF"
+  adaptive_icon_foreground: "assets/images/spwrite_logo.png"
+  ios: true
+  remove_alpha_ios: true
+  # Desktop
+  macos:
+    generate: true
+    image_path: "assets/images/spwrite_logo.png"
+  windows:
+    generate: true
+    image_path: "assets/images/spwrite_logo.png"
+  # Web (favicon + PWA icons)
+  web:
+    generate: true
+    image_path: "assets/images/spwrite_logo.png"
+    background_color: "#0A0F1E"
+    theme_color: "#0A0F1E"
 
 flutter:
   uses-material-design: true
+
+  # Bundle EB Garamond — a classic book serif — so the editor renders the same
+  # literary typeface on every platform (including Flutter web, which does not
+  # reliably resolve system font names like "Georgia"). These are variable-
+  # weight TTFs; the upright file covers regular through bold and the italic
+  # file covers the italic style. Licensed under the SIL Open Font License
+  # (see assets/fonts/OFL.txt).
+  assets:
+    - assets/images/spwrite_logo.png
+
+  fonts:
+    - family: EB Garamond
+      fonts:
+        - asset: assets/fonts/EBGaramond-Variable.ttf
+        - asset: assets/fonts/EBGaramond-Italic-Variable.ttf
+          style: italic

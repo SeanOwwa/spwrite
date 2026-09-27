@@ -38,6 +38,7 @@ import 'package:flutter/material.dart';
 // The flutter_quill barrel exports a `Document` class that collides with the
 // app's domain [Document]. Hide it from the general import and pull it in under
 // a `quill` prefix so both can be used unambiguously in one file.
+import 'package:flutter/services.dart';
 import 'package:flutter_quill/flutter_quill.dart' hide Document;
 import 'package:flutter_quill/flutter_quill.dart' as quill show Document;
 import 'package:flutter_quill/quill_delta.dart';
@@ -46,6 +47,7 @@ import 'package:provider/provider.dart';
 import '../domain/document.dart';
 import '../state/project_workspace_state.dart';
 import '../theme/app_theme.dart';
+import 'character_panel_view.dart';
 import 'editor_toolbar.dart';
 
 /// The WYSIWYG writing surface for the [ProjectWorkspaceState.activeDocument]
@@ -82,6 +84,13 @@ class _EditorViewState extends State<EditorView> {
   /// [build] to detect an identity change.
   String? _loadedDocId;
 
+  /// The live word count of the current editor content, shown in the upper-
+  /// right of the title bar. Recomputed whenever the document changes.
+  int _wordCount = 0;
+
+  /// Whether the right-hand Character Panel is currently open.
+  bool _characterPanelOpen = false;
+
   /// Guards against re-entrant [onContentChanged] dispatches while we are
   /// programmatically replacing the controller's document (load path), and
   /// avoids notifying the state during the frame in which we rebuild.
@@ -115,6 +124,9 @@ class _EditorViewState extends State<EditorView> {
       selection: const TextSelection.collapsed(offset: 0),
     );
 
+    // Seed the word count from the freshly loaded document.
+    _wordCount = _countWords(controller.document.toPlainText());
+
     // Forward local edits (typing / toolbar formatting) to the state layer,
     // which computes the Markdown, enforces the cap, and schedules the save
     // (Req 14.8, 15.4). Programmatic replacements (the load path above) are
@@ -123,6 +135,14 @@ class _EditorViewState extends State<EditorView> {
     // edits made through this controller.
     controller.document.changes.listen((DocChange event) {
       if (!mounted) return;
+
+      // Keep the live word count in sync with the current content on every
+      // change (user edits and any programmatic replacement).
+      final int count = _countWords(controller.document.toPlainText());
+      if (count != _wordCount) {
+        setState(() => _wordCount = count);
+      }
+
       if (_syncingDocument) return;
       if (event.source != ChangeSource.local) return;
       // [state] is the single workspace instance for this open project; it is
@@ -132,6 +152,14 @@ class _EditorViewState extends State<EditorView> {
     });
 
     _controller = controller;
+  }
+
+  /// Counts the words in [text], where a word is any run of non-whitespace
+  /// characters. Returns 0 for empty or whitespace-only content.
+  int _countWords(String text) {
+    final String trimmed = text.trim();
+    if (trimmed.isEmpty) return 0;
+    return trimmed.split(RegExp(r'\s+')).length;
   }
 
   /// Converts stored Markdown [markdown] to a Delta via the workspace codec,
@@ -190,15 +218,65 @@ class _EditorViewState extends State<EditorView> {
     final bool atMaxLength =
         active.content.length >= ProjectWorkspaceState.maxContentLength;
 
-    return Column(
+    final Widget editorColumn = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
         _buildTitleBar(context, active),
-        EditorToolbar(controller: _controller!),
+        _buildToolbarRow(context),
         const Divider(height: 1, thickness: 1, color: AppPalette.outline),
         if (atMaxLength) _buildMaxLengthIndicator(context),
         Expanded(child: _buildEditor()),
       ],
+    );
+
+    // The Character Panel opens as a right-hand sidebar beside the editor.
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        Expanded(child: editorColumn),
+        if (_characterPanelOpen) ...<Widget>[
+          const VerticalDivider(width: 1, thickness: 1),
+          SizedBox(
+            width: _characterPanelWidth,
+            child: CharacterPanelView(
+              onClose: () => setState(() => _characterPanelOpen = false),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  /// The fixed width of the Character Panel sidebar when open.
+  static const double _characterPanelWidth = 320;
+
+  /// The toolbar row: the WYSIWYG [EditorToolbar] on the left and the Character
+  /// Panel toggle pinned to the right (Req: "put it in the right side of the
+  /// editor tool").
+  Widget _buildToolbarRow(BuildContext context) {
+    return Container(
+      color: AppPalette.surface,
+      child: Row(
+        children: <Widget>[
+          Expanded(child: EditorToolbar(controller: _controller!)),
+          const SizedBox(width: 4),
+          IconButton(
+            tooltip: _characterPanelOpen
+                ? 'Hide characters'
+                : 'Show characters',
+            icon: Icon(
+              Icons.people_alt_outlined,
+              color: _characterPanelOpen
+                  ? AppPalette.secondary
+                  : AppPalette.textSecondary,
+            ),
+            onPressed: () => setState(
+              () => _characterPanelOpen = !_characterPanelOpen,
+            ),
+          ),
+          const SizedBox(width: 4),
+        ],
+      ),
     );
   }
 
@@ -260,7 +338,29 @@ class _EditorViewState extends State<EditorView> {
                     ),
                   ),
           ),
+          const SizedBox(width: 12),
+          _buildWordCount(context),
         ],
+      ),
+    );
+  }
+
+  /// The live word-count badge shown in the upper-right corner of the title
+  /// bar. Reflects [_wordCount], which is kept in sync with the editor content.
+  Widget _buildWordCount(BuildContext context) {
+    final String label = _wordCount == 1 ? '1 word' : '$_wordCount words';
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: AppPalette.surfaceVariant,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Text(
+        label,
+        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: AppPalette.secondary,
+              fontWeight: FontWeight.w600,
+            ),
       ),
     );
   }
@@ -293,18 +393,161 @@ class _EditorViewState extends State<EditorView> {
     return Container(
       color: AppPalette.background,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      child: QuillEditor(
-        controller: _controller!,
-        focusNode: _editorFocusNode,
-        scrollController: _editorScrollController,
-        config: const QuillEditorConfig(
-          placeholder: 'Start writing…',
-          padding: EdgeInsets.zero,
-          expands: true,
-          scrollable: true,
-          autoFocus: false,
+      // Bind Tab at the Shortcuts level so it is resolved *before* the
+      // QuillEditor's own internal key handler (which otherwise inserts a
+      // single '\t'). CallbackShortcuts sits above the editor's focus scope, so
+      // our indent wins. Shift+Tab is intentionally left unbound and keeps its
+      // default behaviour.
+      child: CallbackShortcuts(
+        bindings: <ShortcutActivator, VoidCallback>{
+          const SingleActivator(LogicalKeyboardKey.tab): _insertTabIndent,
+        },
+        child: QuillEditor(
+          controller: _controller!,
+          focusNode: _editorFocusNode,
+          scrollController: _editorScrollController,
+          config: const QuillEditorConfig(
+            placeholder: 'Start writing…',
+            padding: EdgeInsets.zero,
+            expands: true,
+            scrollable: true,
+            autoFocus: false,
+            // Serif body text with double (2.0) line spacing — the Google Docs
+            // standard for manuscripts. Only the styles we want to override are
+            // provided; flutter_quill merges these over its defaults.
+            customStyles: _editorStyles,
+          ),
         ),
       ),
     );
   }
+
+  /// The number of spaces one Tab press inserts (the indent width).
+  static const int _tabWidth = 10;
+
+  /// The literal text a Tab press inserts: [_tabWidth] spaces.
+  static final String _tabIndent = ' ' * _tabWidth;
+
+  /// Inserts [_tabWidth] spaces at the current selection (replacing any
+  /// selected text) and places the caret after the indent. Bound to the Tab key
+  /// via [CallbackShortcuts] so it runs before the editor's default Tab
+  /// handling; the edit goes through the normal local-edit path so it is
+  /// captured, saved, and Markdown-encoded.
+  void _insertTabIndent() {
+    final QuillController? controller = _controller;
+    if (controller == null) return;
+
+    final TextSelection selection = controller.selection;
+    if (!selection.isValid) return;
+
+    final int start = selection.start;
+    final int length = selection.end - selection.start;
+    controller.replaceText(
+      start,
+      length,
+      _tabIndent,
+      TextSelection.collapsed(offset: start + _tabIndent.length),
+    );
+  }
+
+  /// The bundled book serif used for the editor body. Declared in pubspec.yaml
+  /// from the EB Garamond variable fonts under assets/fonts/, so it renders the
+  /// same literary typeface on every platform (including web).
+  static const String _serifFamily = 'EB Garamond';
+
+  /// The body font size for the paragraph / list text. EB Garamond runs a
+  /// little small, so it is set slightly larger to read comfortably like a book.
+  static const double _bodyFontSize = 19;
+
+  /// The line-height multiplier applied to body text: 2.0 (double spacing),
+  /// the Google Docs standard.
+  static const double _lineHeight = 2.0;
+
+  /// Fallback serif faces used if the bundled [_serifFamily] is unavailable.
+  static const List<String> _serifFallback = <String>[
+    'Georgia',
+    'Times New Roman',
+    'serif',
+  ];
+
+  /// Serif body text styles with double (2.0) line spacing, layered over
+  /// flutter_quill's defaults via [QuillEditorConfig.customStyles]. The body,
+  /// list items, and every heading level use the bundled book serif so the
+  /// whole manuscript reads as one serif, double-spaced document.
+  static const DefaultStyles _editorStyles = DefaultStyles(
+    h1: DefaultTextBlockStyle(
+      TextStyle(
+        fontFamily: _serifFamily,
+        fontFamilyFallback: _serifFallback,
+        fontSize: 34,
+        height: 1.25,
+        fontWeight: FontWeight.w700,
+        color: AppPalette.textPrimary,
+        decoration: TextDecoration.none,
+      ),
+      HorizontalSpacing(0, 0),
+      VerticalSpacing(16, 0),
+      VerticalSpacing(0, 0),
+      null,
+    ),
+    h2: DefaultTextBlockStyle(
+      TextStyle(
+        fontFamily: _serifFamily,
+        fontFamilyFallback: _serifFallback,
+        fontSize: 28,
+        height: 1.3,
+        fontWeight: FontWeight.w700,
+        color: AppPalette.textPrimary,
+        decoration: TextDecoration.none,
+      ),
+      HorizontalSpacing(0, 0),
+      VerticalSpacing(12, 0),
+      VerticalSpacing(0, 0),
+      null,
+    ),
+    h3: DefaultTextBlockStyle(
+      TextStyle(
+        fontFamily: _serifFamily,
+        fontFamilyFallback: _serifFallback,
+        fontSize: 23,
+        height: 1.35,
+        fontWeight: FontWeight.w700,
+        color: AppPalette.textPrimary,
+        decoration: TextDecoration.none,
+      ),
+      HorizontalSpacing(0, 0),
+      VerticalSpacing(8, 0),
+      VerticalSpacing(0, 0),
+      null,
+    ),
+    paragraph: DefaultTextBlockStyle(
+      TextStyle(
+        fontFamily: _serifFamily,
+        fontFamilyFallback: _serifFallback,
+        fontSize: _bodyFontSize,
+        height: _lineHeight,
+        color: AppPalette.textPrimary,
+        decoration: TextDecoration.none,
+      ),
+      HorizontalSpacing(0, 0),
+      VerticalSpacing(0, 0),
+      VerticalSpacing(0, 0),
+      null,
+    ),
+    lists: DefaultListBlockStyle(
+      TextStyle(
+        fontFamily: _serifFamily,
+        fontFamilyFallback: _serifFallback,
+        fontSize: _bodyFontSize,
+        height: _lineHeight,
+        color: AppPalette.textPrimary,
+        decoration: TextDecoration.none,
+      ),
+      HorizontalSpacing(0, 0),
+      VerticalSpacing(6, 0),
+      VerticalSpacing(0, 6),
+      null,
+      null,
+    ),
+  );
 }

@@ -10,6 +10,7 @@ library;
 
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
+import '../domain/character.dart';
 import '../domain/document.dart';
 import '../domain/folder.dart';
 import '../domain/project.dart';
@@ -35,6 +36,9 @@ class SqliteProjectRepository implements ProjectRepository {
 
   /// The `documents` table name, used by the cascade delete.
   static const String _documentsTable = DatabaseProvider.documentsTable;
+
+  /// The `characters` table name, used by the cascade delete.
+  static const String _charactersTable = DatabaseProvider.charactersTable;
 
   /// Creates a repository over the given open [database].
   const SqliteProjectRepository(Database database) : _db = database;
@@ -113,6 +117,14 @@ class SqliteProjectRepository implements ProjectRepository {
       await txn.delete(
         _foldersTable,
         where: '${FolderColumns.projectId} = ?',
+        whereArgs: <Object?>[id],
+      );
+      // Characters are project-scoped too; remove them in the same transaction
+      // so a deleted project leaves no orphaned characters (behavior identical
+      // on web, where the FK cascade PRAGMA is skipped).
+      await txn.delete(
+        _charactersTable,
+        where: '${CharacterColumns.projectId} = ?',
         whereArgs: <Object?>[id],
       );
       await txn.delete(

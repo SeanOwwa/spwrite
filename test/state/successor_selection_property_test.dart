@@ -42,12 +42,12 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kiri_check/kiri_check.dart';
 
-import 'package:writing_app/domain/document.dart';
-import 'package:writing_app/domain/document_repository.dart';
-import 'package:writing_app/domain/folder.dart';
-import 'package:writing_app/domain/folder_repository.dart';
-import 'package:writing_app/domain/project.dart';
-import 'package:writing_app/state/project_workspace_state.dart';
+import 'package:spwrite/domain/document.dart';
+import 'package:spwrite/domain/document_repository.dart';
+import 'package:spwrite/domain/folder.dart';
+import 'package:spwrite/domain/folder_repository.dart';
+import 'package:spwrite/domain/project.dart';
+import 'package:spwrite/state/project_workspace_state.dart';
 
 // ---------------------------------------------------------------------------
 // Map-backed fake repositories

@@ -9,11 +9,11 @@
 /// `Sqlite*Repository` implementations over the one open [Database], and
 /// [AppNavigationState] over the [ProjectRepository] with a workspace factory
 /// that builds a [ProjectWorkspaceState] from the folder / document
-/// repositories (Req 5.1, 5.2) — and hands the navigation state to [WritingApp]
+/// repositories (Req 5.1, 5.2) — and hands the navigation state to [SpwriteApp]
 /// before triggering the initial [AppNavigationState.loadProjects] (Req 1.1,
 /// 17.5).
 ///
-/// [WritingApp] is the root `MaterialApp`: it hosts [AppNavigationState] via
+/// [SpwriteApp] is the root `MaterialApp`: it hosts [AppNavigationState] via
 /// `provider` and applies [AppTheme.dark] at the root so every surface inherits
 /// the dark palette before it renders (Req 18.1, 18.4). [AppRoot] switches
 /// between the [DashboardView] (no Active_Project) and the [WorkspaceShell] (a
@@ -32,9 +32,11 @@ import 'package:provider/provider.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart' show Database;
 
 import 'data/database_provider.dart';
+import 'data/sqlite_character_repository.dart';
 import 'data/sqlite_document_repository.dart';
 import 'data/sqlite_folder_repository.dart';
 import 'data/sqlite_project_repository.dart';
+import 'domain/character_repository.dart';
 import 'domain/document_repository.dart';
 import 'domain/folder_repository.dart';
 import 'domain/project.dart';
@@ -44,11 +46,12 @@ import 'presentation/editor_view.dart';
 import 'presentation/error_surfaces.dart';
 import 'presentation/project_sidebar_view.dart';
 import 'state/app_navigation_state.dart';
+import 'state/character_panel_state.dart';
 import 'state/load_status.dart';
 import 'state/project_workspace_state.dart';
 import 'theme/app_theme.dart';
 
-/// Runs the v2 startup sequence and launches [WritingApp] (Req 17.4, 17.7,
+/// Runs the v2 startup sequence and launches [SpwriteApp] (Req 17.4, 17.7,
 /// 5.1, 5.2).
 ///
 /// The database is opened with `await` so the file and v2 schema are created
@@ -85,10 +88,12 @@ Future<void> main() async {
     rethrow;
   }
 
-  // Wire the layers: the three repositories over the one open database.
+  // Wire the layers: the repositories over the one open database.
   final ProjectRepository projectRepository = SqliteProjectRepository(db);
   final FolderRepository folderRepository = SqliteFolderRepository(db);
   final DocumentRepository documentRepository = SqliteDocumentRepository(db);
+  final CharacterRepository characterRepository =
+      SqliteCharacterRepository(db);
 
   // The workspace factory builds a ProjectWorkspaceState for a freshly opened
   // project over the folder / document repositories and kicks off its contents
@@ -110,7 +115,10 @@ Future<void> main() async {
     },
   );
 
-  runApp(WritingApp(appState: appState));
+  runApp(SpwriteApp(
+    appState: appState,
+    characterRepository: characterRepository,
+  ));
 
   // Trigger the initial project-list load after startup (Req 1.1, 17.5).
   // Fire-and-forget so it does not block the first frame; the Dashboard
@@ -125,17 +133,28 @@ Future<void> main() async {
 /// for the life of the app) and applies [AppTheme.dark] as both `theme` and
 /// `darkTheme` with [ThemeMode.dark], so the dark palette is applied at the
 /// root before any surface renders (Req 18.1, 18.4).
-class WritingApp extends StatelessWidget {
+class SpwriteApp extends StatelessWidget {
   /// The single [AppNavigationState] the whole widget tree observes,
   /// constructed in [main].
   final AppNavigationState appState;
 
-  const WritingApp({super.key, required this.appState});
+  /// The character persistence abstraction, provided to the tree so the
+  /// per-project [CharacterPanelState] can be built when a project is open.
+  final CharacterRepository characterRepository;
+
+  const SpwriteApp({
+    super.key,
+    required this.appState,
+    required this.characterRepository,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider<AppNavigationState>.value(
-      value: appState,
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider<AppNavigationState>.value(value: appState),
+        Provider<CharacterRepository>.value(value: characterRepository),
+      ],
       child: MaterialApp(
         title: 'Spwrite',
         debugShowCheckedModeBanner: false,
@@ -182,12 +201,25 @@ class AppRoot extends StatelessWidget {
       return const DashboardView();
     }
 
-    // A project is open: provide its workspace to the subtree and show the
-    // shell. The value key ties this provider to the open project's id so a new
-    // workspace replaces the old one cleanly.
-    return ChangeNotifierProvider<ProjectWorkspaceState>.value(
+    // A project is open: provide its workspace and a project-scoped
+    // CharacterPanelState to the subtree, then show the shell. The value keys
+    // tie both providers to the open project's id so opening a different
+    // project (or reopening) rebuilds them against the fresh project rather
+    // than reusing stale state. The CharacterPanelState is created here (and
+    // disposed by the provider when the project changes) and kicks off its
+    // initial load.
+    final CharacterRepository characterRepository =
+        context.read<CharacterRepository>();
+    return MultiProvider(
       key: ValueKey<String>(activeProject.id),
-      value: workspace,
+      providers: [
+        ChangeNotifierProvider<ProjectWorkspaceState>.value(value: workspace),
+        ChangeNotifierProvider<CharacterPanelState>(
+          create: (_) =>
+              CharacterPanelState(activeProject.id, characterRepository)
+                ..load(),
+        ),
+      ],
       child: const WorkspaceShell(),
     );
   }
