@@ -9,10 +9,9 @@
 /// [AppPalette] so the screen matches the dark navy theme.
 library;
 
-import 'dart:typed_data';
-
+import 'package:file_selector/file_selector.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
 
 import '../domain/character.dart';
 import '../state/character_panel_state.dart';
@@ -70,23 +69,36 @@ class _CharacterEditViewState extends State<CharacterEditView> {
     super.dispose();
   }
 
-  /// Opens the platform image picker and stores the chosen image's bytes in the
-  /// working copy. The picker is capped to a reasonable size so portraits do
-  /// not bloat the database.
+  /// The image file types the portrait picker accepts. Extensions cover the
+  /// common raster formats; UTIs (macOS/iOS) and MIME types (web) let the
+  /// native dialogs filter correctly on every platform.
+  static const XTypeGroup _imageTypeGroup = XTypeGroup(
+    label: 'Images',
+    extensions: <String>['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'heic'],
+    mimeTypes: <String>['image/*'],
+    uniformTypeIdentifiers: <String>['public.image'],
+  );
+
+  /// Opens the native file dialog and stores the chosen image's bytes in the
+  /// working copy.
+  ///
+  /// Uses `file_selector` (Flutter's first-party picker) so this works on
+  /// macOS, Windows, Linux, web, and mobile alike — unlike image_picker's
+  /// gallery source, which is unsupported on desktop. The selected file is read
+  /// into memory as bytes and kept in [_imageBytes]; persistence stores those
+  /// bytes as a BLOB with the character.
   Future<void> _pickImage() async {
     try {
-      final ImagePicker picker = ImagePicker();
-      final XFile? file = await picker.pickImage(
-        source: ImageSource.gallery,
-        maxWidth: 1024,
-        maxHeight: 1024,
-        imageQuality: 85,
-      );
-      if (file == null) return;
+      final XFile? file =
+          await openFile(acceptedTypeGroups: <XTypeGroup>[_imageTypeGroup]);
+      if (file == null) return; // User cancelled the dialog.
       final Uint8List bytes = await file.readAsBytes();
       if (!mounted) return;
       setState(() => _imageBytes = bytes);
-    } catch (_) {
+    } catch (error, stackTrace) {
+      // Surface the real cause in debug output so a platform/sandbox failure is
+      // diagnosable, while still showing the user a friendly message.
+      debugPrint('Portrait image pick failed: $error\n$stackTrace');
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Could not load that image.')),

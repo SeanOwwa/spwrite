@@ -29,9 +29,12 @@ dependencies:
   flutter_quill: 11.6.0
   markdown_quill: 4.3.0
   markdown: 7.3.1
-  # Cross-platform image selection for character portraits (web, desktop,
-  # mobile). Returns bytes, which are stored with the character in SQLite.
-  image_picker: ^1.1.2
+  # Cross-platform file selection for character portraits (web, desktop,
+  # mobile). Flutter's first-party picker; opens the native file dialog and
+  # returns an XFile whose bytes are stored with the character in SQLite. Used
+  # instead of image_picker because image_picker's gallery source is not
+  # supported on macOS/desktop, whereas file_selector works on every platform.
+  file_selector: ^1.0.3
   # ZIP archive writing, used to assemble the .docx (OpenXML) package for the
   # DOCX export. Pure Dart, works on web.
   archive: ^3.6.1

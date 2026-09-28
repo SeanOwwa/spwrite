@@ -79,3 +79,9 @@ app.*.map.json
 # `*.log` above already covers spwrite-*.log; the PID files are added here.
 spwrite-*.pid
 spwrite-*.log.err
+
+# Built/copied app bundles left in the project root (e.g. Spwrite.app copied
+# out of build/ for convenience). The real build output lives under build/,
+# which is already ignored; these are just throwaway copies.
+/*.app
+/Spwrite.app

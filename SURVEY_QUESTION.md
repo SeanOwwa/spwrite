@@ -133,3 +133,13 @@ expected (title as heading, one document per page)?**
 
 **Q15. What would make organizing and exporting your writing in Spwrite better?**
 *Question type: Paragraph (long answer)*
+
+**Q16. Spwrite shows a small status pill in the top-left of the editor toolbar
+that reads "Saving…" as you type and "Saved" once your text is stored. How does
+this affect your confidence that your work is safe?**
+*Question type: Multiple choice*
+- Reassuring — I can see my work is saved and never worry about it
+- Helpful, but I'd only glance at it occasionally
+- I didn't notice the indicator
+- I'd prefer a manual Save button as well
+- The indicator was unclear or distracting

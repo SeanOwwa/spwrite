@@ -16,33 +16,122 @@
 .PARAMETER Mode
   now | background   (default: now)
 
+.PARAMETER Deps
+  When set, first installs the system prerequisites -- Flutter and the Visual
+  Studio C++ build tools -- using winget (falling back to Chocolatey if
+  present), then continues with the normal build + run. Each install asks for
+  confirmation first. You may also pass the bare word 'deps' as an argument.
+
+.PARAMETER AssumeYes
+  Answer "yes" to every confirmation prompt (non-interactive installs).
+
 .EXAMPLE
   .\scripts\install.ps1 web now
   .\scripts\install.ps1 windows background
+  .\scripts\install.ps1 windows -Deps
+  .\scripts\install.ps1 deps
 #>
 param(
-  [ValidateSet('windows', 'web')]
+  [ValidateSet('windows', 'web', 'deps')]
   [string]$Platform = 'web',
 
-  [ValidateSet('now', 'background')]
+  [ValidateSet('now', 'background', 'deps')]
   [string]$Mode = 'now',
 
-  [int]$WebPort = 8080
+  [int]$WebPort = 8080,
+
+  [switch]$Deps,
+
+  [switch]$AssumeYes
 )
 
 $ErrorActionPreference = 'Stop'
 
+# Accept the bare word 'deps' in either positional slot, then normalize the
+# platform/mode back to their real defaults.
+$WantDeps = [bool]$Deps
+if ($Platform -eq 'deps') { $WantDeps = $true; $Platform = 'web' }
+if ($Mode -eq 'deps')     { $WantDeps = $true; $Mode = 'now' }
+
 function Write-Step($msg) { Write-Host "==> $msg" -ForegroundColor Cyan }
 function Write-Warn($msg) { Write-Host "[warn] $msg" -ForegroundColor Yellow }
+
+# Ask a yes/no question. Returns $true for yes. Honors -AssumeYes, and defaults
+# to "no" when running non-interactively so an unattended run never blocks.
+function Confirm-Step($msg) {
+  if ($AssumeYes) { Write-Step "$msg -> yes (AssumeYes)"; return $true }
+  if ([Environment]::UserInteractive -eq $false) {
+    Write-Warn "$msg -> no (non-interactive; skipping)"; return $false
+  }
+  $reply = Read-Host "[?] $msg [y/N]"
+  return @('y', 'Y', 'yes', 'YES') -contains $reply
+}
+
+# Windows dependency bootstrap: prefer winget (ships with modern Windows),
+# fall back to Chocolatey when present. Installs Flutter and, for a desktop
+# build, the Visual Studio C++ build tools.
+function Invoke-Bootstrap {
+  $haveWinget = [bool](Get-Command winget -ErrorAction SilentlyContinue)
+  $haveChoco  = [bool](Get-Command choco  -ErrorAction SilentlyContinue)
+
+  if (-not $haveWinget -and -not $haveChoco) {
+    Write-Warn "Neither winget nor Chocolatey is available."
+    Write-Warn "Install winget (App Installer) from the Microsoft Store, or Chocolatey from https://chocolatey.org/install, then re-run with -Deps."
+    Write-Warn "Or install Flutter manually: https://docs.flutter.dev/get-started/install/windows"
+    return
+  }
+
+  # Flutter.
+  if (-not (Get-Command flutter -ErrorAction SilentlyContinue)) {
+    if (Confirm-Step "Install Flutter now?") {
+      if ($haveWinget) {
+        Write-Step "Installing Flutter via winget..."
+        winget install --id Google.Flutter -e --accept-source-agreements --accept-package-agreements
+      } else {
+        Write-Step "Installing Flutter via Chocolatey..."
+        choco install flutter -y
+      }
+      Write-Warn "You may need to open a new terminal so 'flutter' is on your PATH, then re-run."
+    }
+  }
+
+  # Visual Studio C++ build tools — required only for a Windows desktop build,
+  # not for the web build.
+  if ($Platform -eq 'windows') {
+    if (Confirm-Step "Install the Visual Studio C++ build tools (large download)?") {
+      if ($haveWinget) {
+        Write-Step "Installing Visual Studio Build Tools with the C++ workload via winget..."
+        winget install --id Microsoft.VisualStudio.2022.BuildTools -e --accept-source-agreements --accept-package-agreements `
+          --override "--quiet --wait --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended"
+      } else {
+        Write-Step "Installing Visual Studio Build Tools via Chocolatey..."
+        choco install visualstudio2022buildtools -y --package-parameters "--add Microsoft.VisualStudio.Workload.VCTools --includeRecommended"
+      }
+    }
+  }
+}
 
 # Resolve the project root (parent of this scripts\ directory).
 $ScriptDir   = Split-Path -Parent $MyInvocation.MyCommand.Path
 $ProjectRoot = Split-Path -Parent $ScriptDir
 Set-Location $ProjectRoot
 
+# --- 0. Dependency bootstrap (opt-in) ------------------------------------
+if ($WantDeps) {
+  Write-Step "Installing prerequisites (deps mode)..."
+  Invoke-Bootstrap
+}
+
 # --- 1. Flutter SDK check -------------------------------------------------
 if (-not (Get-Command flutter -ErrorAction SilentlyContinue)) {
-  Write-Error "Flutter SDK not found on PATH. Install it from https://docs.flutter.dev/get-started/install/windows then re-run this script."
+  # If the user did not ask for deps, offer the bootstrap now rather than just
+  # failing, so a first-time user has a one-word path forward.
+  if (-not $WantDeps -and (Confirm-Step "Flutter is not installed. Install prerequisites automatically now?")) {
+    Invoke-Bootstrap
+  }
+}
+if (-not (Get-Command flutter -ErrorAction SilentlyContinue)) {
+  Write-Error "Flutter SDK not found on PATH. Install it automatically by re-running with -Deps (e.g. '.\scripts\install.ps1 $Platform -Deps'), or manually from https://docs.flutter.dev/get-started/install/windows then re-run. If you just installed it, open a new terminal so PATH updates."
   exit 1
 }
 Write-Step ("Flutter found: " + (flutter --version | Select-Object -First 1))

@@ -12,8 +12,12 @@ browser on the web), so your writing is always with you and works offline.
   so your drafts are easy on the eyes and easy to mark up.
 - **Live word count.** A running word count sits in the upper-right corner of
   the document, updating as you type.
-- **Deep navy theme.** A dark, navy-blue workspace with dark-cyan highlights,
-  designed to be gentle for long writing sessions.
+- **Deep navy theme.** A dark, navy-blue workspace with dark-cyan highlights
+  and a soft gradient backdrop, designed to be gentle for long writing
+  sessions.
+- **Modern, tactile interface.** Rounded cards with subtle depth, project tiles
+  that lift as you hover and carry a colorful initial badge, and pill-shaped
+  controls throughout — a clean, contemporary feel that stays out of your way.
 
 ## What you can do
 
@@ -37,8 +41,11 @@ browser on the web), so your writing is always with you and works offline.
   your characters. Each one has a name, role, free-form details, and a portrait
   image. The sidebar shows a short preview of the details; tap "See more" to
   read the full details right there, or open one to edit it on its own screen.
-- **Autosave.** Your work saves itself as you go; there is no Save button to
-  remember.
+- **Autosave with a save indicator.** Your work saves itself as you go; there
+  is no Save button to remember. A small status pill in the top-left of the
+  editor toolbar shows exactly where things stand — "Saving…" the moment you
+  type, then "Saved" once your text is safely on disk — so you always know your
+  writing is captured.
 
 ---
 
@@ -50,16 +57,45 @@ and builds the app — this can take a few minutes. After that it is quick.
 
 ### Before you begin (one-time)
 
-Spwrite is built with a free tool called **Flutter**. If you do not already have
-it, the installer will stop and give you a link to install it. You can install
-it ahead of time from the
-[Flutter install guide](https://docs.flutter.dev/get-started/install).
+Spwrite is built with a free tool called **Flutter**. You have two options:
+
+- **Let the installer set it up for you.** Add the word `deps` when you run the
+  installer and it will install Flutter and the build tools for you, using
+  **Homebrew** on Mac, your system's package manager (`apt` / `dnf` / `pacman`,
+  plus `snap`) on Linux, and **winget** (or Chocolatey) on Windows. It asks for
+  your confirmation before each install, so nothing happens without your
+  say-so. See "Install the prerequisites automatically" below.
+- **Or install it yourself ahead of time** from the
+  [Flutter install guide](https://docs.flutter.dev/get-started/install).
 
 - **To use Spwrite in a web browser**, you also need **Google Chrome**.
 - **To get a desktop app** (an icon you double-click), you need your system's
   developer tools: **Xcode** on Mac, **Visual Studio** with "Desktop
   development with C++" on Windows, or the **C/C++ build tools and GTK** on
-  Linux. The Flutter install guide walks you through this.
+  Linux. The `deps` option installs the command-line/build tools for you on
+  every platform; on Mac, the **full Xcode** app (needed only to build a
+  signed desktop app) still has to come from the Mac App Store, and the
+  installer will tell you if it's missing.
+
+#### Install the prerequisites automatically
+
+Add `deps` to your install command and the script installs Flutter and the
+build tools before it builds the app. Everything that installs software or
+needs an administrator password asks you to confirm first.
+
+```bash
+./scripts/install.sh web deps         # Mac / Linux: install prerequisites, then run web
+./scripts/install.sh macos deps       # Mac: also set up the macOS desktop tools
+```
+```powershell
+.\scripts\install.ps1 web -Deps       # Windows: install prerequisites, then run web
+.\scripts\install.ps1 windows -Deps   # Windows: also set up the desktop C++ tools
+```
+
+If Flutter is missing and you *didn't* add `deps`, the installer will still
+offer to set everything up for you before it stops. After a fresh install of
+Flutter you may need to open a new terminal window so it's found on your `PATH`,
+then run the installer again.
 
 ---
 
@@ -165,9 +201,22 @@ WEB_PORT=9000 ./scripts/install.sh web           # Mac / Linux
 | `macos` / `linux` / `windows` | Builds a double-clickable desktop app |
 | `now` (default) | Runs in the current terminal window |
 | `background` | Runs quietly on its own |
+| `deps` (Mac/Linux) or `-Deps` (Windows) | Installs Flutter + build tools first, then continues |
 
 You can combine a platform and a mode, e.g. `./scripts/install.sh macos now` or
-`.\scripts\install.ps1 windows background`.
+`.\scripts\install.ps1 windows background`. Add `deps` / `-Deps` to any of them
+to install the prerequisites first, e.g. `./scripts/install.sh macos deps` or
+`.\scripts\install.ps1 windows -Deps`.
+
+**Skip the confirmation prompts.** For an unattended install that answers "yes"
+to every prompt, set `ASSUME_YES=1` (Mac/Linux) or pass `-AssumeYes` (Windows):
+
+```bash
+ASSUME_YES=1 ./scripts/install.sh web deps       # Mac / Linux
+```
+```powershell
+.\scripts\install.ps1 web -Deps -AssumeYes        # Windows
+```
 
 ---
 
