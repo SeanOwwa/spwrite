@@ -50,6 +50,26 @@ enum DocStatus {
   error,
 }
 
+/// Lifecycle of the Active_Document's autosave, surfaced to the Editor so it
+/// can show a save indicator at the top-left of the toolbar. Transitions:
+/// a genuine edit moves it to [saving]; a successful persist moves it to
+/// [saved]; a failed persist moves it to [error]. It sits at [idle] before any
+/// edit is made to the current document.
+enum SaveStatus {
+  /// No unsaved edit has been made to the active document yet.
+  idle,
+
+  /// The active document has an unsaved edit, or a save is in flight.
+  saving,
+
+  /// The most recent edit has been persisted to the store.
+  saved,
+
+  /// The most recent save attempt failed; the edit is kept in memory and will
+  /// be retried on the next edit.
+  error,
+}
+
 /// One entry in the project's root level, which is a single ordered sequence
 /// that interleaves folders and root-level documents (Req v3: a document may
 /// sit above, below, or between folders). Exactly one of [folder] / [document]
@@ -138,6 +158,12 @@ class ProjectWorkspaceState extends ChangeNotifier {
   /// Status of the Active_Project's contents load (folders + documents)
   /// (Req 6.1, 6.11).
   LoadStatus _contentsStatus = LoadStatus.idle;
+
+  /// Lifecycle of the Active_Document's autosave, surfaced to the Editor's
+  /// save indicator. Reset to [SaveStatus.idle] whenever the Active_Document
+  /// changes, advanced to [SaveStatus.saving] on a genuine edit, and settled to
+  /// [SaveStatus.saved] / [SaveStatus.error] by the debounced save.
+  SaveStatus _saveStatus = SaveStatus.idle;
 
   /// The set of expanded folder ids. A folder id present here is expanded;
   /// absent means collapsed (Req 6.4, 6.5).
@@ -549,6 +575,12 @@ class ProjectWorkspaceState extends ChangeNotifier {
   /// Status of the Active_Project's contents load.
   LoadStatus get contentsStatus => _contentsStatus;
 
+  /// Lifecycle of the Active_Document's autosave, for the Editor's save
+  /// indicator: [SaveStatus.idle] before any edit, [SaveStatus.saving] while an
+  /// edit is unsaved / being written, [SaveStatus.saved] once persisted, and
+  /// [SaveStatus.error] if the last save failed.
+  SaveStatus get saveStatus => _saveStatus;
+
   /// Whether the folder identified by [folderId] is currently expanded
   /// (Req 6.4, 6.5).
   bool isExpanded(String folderId) => _expandedFolderIds.contains(folderId);
@@ -830,6 +862,8 @@ class ProjectWorkspaceState extends ChangeNotifier {
       _documents = _sortedDocuments(<Document>[..._documents, created]);
       _activeDocument = created;
       _editorStatus = DocStatus.ready;
+      // Newly created document has no pending edit: reset the save indicator.
+      _saveStatus = SaveStatus.idle;
       // Req 10.5: the Editor should focus the Content area for the new doc.
       _focusRequested = true;
       // Req 10.6: reveal the new document when it lands in a collapsed folder.
@@ -876,6 +910,8 @@ class ProjectWorkspaceState extends ChangeNotifier {
         _activeDocument = found;
         _editorStatus = DocStatus.ready;
         _transientError = null;
+        // Fresh document: no pending edit, so reset the save indicator.
+        _saveStatus = SaveStatus.idle;
       }
     } catch (_) {
       // Req 11.4: retrieval failed — retain the previous active document.
@@ -1051,6 +1087,9 @@ class ProjectWorkspaceState extends ChangeNotifier {
       _documents = _sortedDocuments(next);
     }
     _transientError = null;
+    // The edit is not yet on disk; surface an in-flight save state so the
+    // Editor's indicator shows the change is being saved.
+    _saveStatus = SaveStatus.saving;
     notifyListeners();
 
     // Req 16.1: coalesce rapid edits into a single deferred save.
@@ -1072,9 +1111,17 @@ class ProjectWorkspaceState extends ChangeNotifier {
     if (activeDoc == null) return;
     try {
       await _documentRepo.update(activeDoc);
+      // The in-memory Content is now on disk: settle the indicator to "saved".
+      // Guard against a document switch mid-save so we do not flash "saved"
+      // for a document that is no longer active.
+      if (_activeDocument?.id == activeDoc.id) {
+        _saveStatus = SaveStatus.saved;
+        notifyListeners();
+      }
     } catch (_) {
       // Req 16.2: retain the in-memory Content; surface a recoverable error.
       _transientError = 'Save failed.';
+      _saveStatus = SaveStatus.error;
       notifyListeners();
     }
   }

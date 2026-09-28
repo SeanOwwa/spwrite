@@ -134,7 +134,11 @@ class _DashboardViewState extends State<DashboardView> {
     // notches / status bars.
     return Scaffold(
       backgroundColor: AppPalette.background,
-      body: SafeArea(
+      body: Container(
+        // A deep navy diagonal wash gives the landing surface subtle depth
+        // instead of a single flat fill.
+        decoration: const BoxDecoration(gradient: AppStyle.appBackground),
+        child: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: <Widget>[
@@ -155,6 +159,7 @@ class _DashboardViewState extends State<DashboardView> {
           ],
         ),
       ),
+      ),
     );
   }
 
@@ -164,7 +169,7 @@ class _DashboardViewState extends State<DashboardView> {
   Widget _buildHeader(BuildContext context, AppNavigationState state) {
     if (_isCreating) {
       return Padding(
-        padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
+        padding: const EdgeInsets.fromLTRB(24, 22, 24, 16),
         child: NameField(
           initialValue: '',
           onConfirm: (String name) => _confirmCreate(state, name),
@@ -173,43 +178,67 @@ class _DashboardViewState extends State<DashboardView> {
       );
     }
 
+    final int count = state.projects.length;
+    final String subtitle = count == 0
+        ? 'No projects yet'
+        : count == 1
+            ? '1 project'
+            : '$count projects';
+
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
+      padding: const EdgeInsets.fromLTRB(24, 22, 24, 16),
       child: Row(
         children: <Widget>[
           // Spwrite brand mark on the landing screen. The source art has a
           // white margin, so it sits on a white rounded tile and is shown in
           // full (contain) rather than cropped.
           Container(
-            width: 40,
-            height: 40,
+            width: 48,
+            height: 48,
             clipBehavior: Clip.antiAlias,
             decoration: BoxDecoration(
               color: Colors.white,
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: BorderRadius.circular(14),
+              boxShadow: AppStyle.cardShadow,
             ),
-            padding: const EdgeInsets.all(2),
+            padding: const EdgeInsets.all(3),
             child: Image.asset(
               'assets/images/spwrite_logo.png',
               fit: BoxFit.contain,
               semanticLabel: 'Spwrite logo',
             ),
           ),
-          const SizedBox(width: 12),
-          const Expanded(
-            child: Text(
-              'Projects',
-              style: TextStyle(
-                color: AppPalette.textPrimary,
-                fontSize: 18,
-                fontWeight: FontWeight.w600,
-              ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                const Text(
+                  'Projects',
+                  style: TextStyle(
+                    color: AppPalette.textPrimary,
+                    fontSize: 24,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: -0.3,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  subtitle,
+                  style: const TextStyle(
+                    color: AppPalette.textSecondary,
+                    fontSize: 13,
+                  ),
+                ),
+              ],
             ),
           ),
-          IconButton(
-            tooltip: 'Create project',
-            icon: const Icon(Icons.add, color: AppPalette.primary),
+          const SizedBox(width: 12),
+          FilledButton.icon(
             onPressed: _beginCreate,
+            icon: const Icon(Icons.add, size: 20),
+            label: const Text('New project'),
           ),
         ],
       ),
@@ -233,20 +262,37 @@ class _DashboardViewState extends State<DashboardView> {
               clipBehavior: Clip.antiAlias,
               decoration: BoxDecoration(
                 color: Colors.white,
-                borderRadius: BorderRadius.circular(24),
+                borderRadius: BorderRadius.circular(28),
+                boxShadow: AppStyle.cardShadow,
               ),
-              padding: const EdgeInsets.all(8),
+              padding: const EdgeInsets.all(10),
               child: Image.asset(
                 'assets/images/spwrite_logo.png',
                 fit: BoxFit.contain,
                 semanticLabel: 'Spwrite logo',
               ),
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 24),
             const Text(
-              'No projects yet. Create one to get started.',
+              'No projects yet',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: AppPalette.textPrimary,
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Create your first project to start writing.',
               textAlign: TextAlign.center,
               style: TextStyle(color: AppPalette.textSecondary),
+            ),
+            const SizedBox(height: 20),
+            FilledButton.icon(
+              onPressed: _beginCreate,
+              icon: const Icon(Icons.add, size: 20),
+              label: const Text('New project'),
             ),
           ],
         ),
@@ -267,12 +313,12 @@ class _DashboardViewState extends State<DashboardView> {
     List<Project> projects,
   ) {
     return GridView.builder(
-      padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+      padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
       gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-        maxCrossAxisExtent: 320,
-        mainAxisExtent: 64,
-        crossAxisSpacing: 12,
-        mainAxisSpacing: 12,
+        maxCrossAxisExtent: 340,
+        mainAxisExtent: 74,
+        crossAxisSpacing: 16,
+        mainAxisSpacing: 16,
       ),
       itemCount: projects.length,
       itemBuilder: (BuildContext context, int index) {
@@ -282,10 +328,13 @@ class _DashboardViewState extends State<DashboardView> {
         // (Req 3.1). Confirm forwards to renameProject then exits; cancel
         // simply exits, retaining the name (Req 3.6).
         if (_renamingId == project.id) {
-          return Card(
-            color: AppPalette.surface,
-            surfaceTintColor: AppPalette.surface,
-            clipBehavior: Clip.antiAlias,
+          return Container(
+            decoration: BoxDecoration(
+              gradient: AppStyle.cardSurface,
+              borderRadius: AppStyle.cardRadius,
+              border: Border.all(color: AppPalette.primary),
+              boxShadow: AppStyle.cardShadow,
+            ),
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               child: NameField(

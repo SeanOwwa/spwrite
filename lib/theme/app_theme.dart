@@ -145,6 +145,24 @@ class AppPalette {
   /// list dividers, so text-contrast thresholds do not apply to it.
   static const Color outline = Color(0xFF5C5C5C);
 
+  // --- Modern UI tints (non-text, additive) -------------------------------
+  //
+  // These are decorative, non-text colors used only for gradients, hairline
+  // borders, and hover overlays in the modernized surfaces. They are not text
+  // foreground/background pairs, so the WCAG contrast pairs in [textPairs] are
+  // unaffected; all existing text still uses the verified colors above.
+
+  /// A soft hairline border used around cards and pills — a low-alpha lift of
+  /// the primary accent so edges read as a subtle glow rather than a hard grey
+  /// line.
+  static const Color hairline = Color(0x1F7FA6FF);
+
+  /// A very subtle top-highlight used on raised surfaces for a soft bevel.
+  static const Color sheen = Color(0x0FFFFFFF);
+
+  /// Hover overlay tint for interactive rows / cards.
+  static const Color hoverOverlay = Color(0x147FA6FF);
+
   /// Every color defined in the palette. Property 11 asserts each themed color
   /// slot is a member of this set.
   static const List<Color> all = <Color>[
@@ -281,6 +299,103 @@ class AppPalette {
   ];
 }
 
+/// Modern, decorative design tokens layered on top of [AppPalette]: corner
+/// radii, gradients, hairline borders, and soft shadows.
+///
+/// These are purely visual (shape / gradient / elevation) and never introduce a
+/// new text-on-background pair, so the WCAG contrast contract in
+/// [AppPalette.textPairs] is untouched — every gradient is built from existing
+/// palette colors and is only ever used behind palette-verified text.
+class AppStyle {
+  const AppStyle._();
+
+  /// Standard corner radius for cards, dialogs, and large surfaces.
+  static const double radiusLarge = 18;
+
+  /// Corner radius for medium controls (buttons, tiles, name fields).
+  static const double radiusMedium = 12;
+
+  /// Corner radius for small pills (status chips, badges).
+  static const double radiusSmall = 10;
+
+  /// Rounded rectangle border for cards / dialogs.
+  static const BorderRadius cardRadius =
+      BorderRadius.all(Radius.circular(radiusLarge));
+
+  /// Rounded rectangle border for medium controls.
+  static const BorderRadius controlRadius =
+      BorderRadius.all(Radius.circular(radiusMedium));
+
+  /// Rounded rectangle border for small pills.
+  static const BorderRadius pillRadius =
+      BorderRadius.all(Radius.circular(radiusSmall));
+
+  /// The ambient app background: a deep navy diagonal wash from the darkest
+  /// base into the raised surface tone, giving the flat background subtle
+  /// depth rather than a single solid fill.
+  static const LinearGradient appBackground = LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: <Color>[
+      AppPalette.background,
+      Color(0xFF0C1226),
+      AppPalette.surface,
+    ],
+    stops: <double>[0.0, 0.55, 1.0],
+  );
+
+  /// A raised-card gradient: a gentle top-to-bottom lift from the surface tone
+  /// into the slightly lighter variant so cards feel dimensional.
+  static const LinearGradient cardSurface = LinearGradient(
+    begin: Alignment.topCenter,
+    end: Alignment.bottomCenter,
+    colors: <Color>[
+      AppPalette.surface,
+      Color(0xFF0E1729),
+    ],
+  );
+
+  /// The brand accent gradient (blue → cyan) used for the logo chip, avatars,
+  /// and primary call-to-action fills.
+  static const LinearGradient accent = LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: <Color>[
+      AppPalette.primary,
+      AppPalette.secondary,
+    ],
+  );
+
+  /// Soft ambient shadow for raised cards.
+  static const List<BoxShadow> cardShadow = <BoxShadow>[
+    BoxShadow(
+      color: Color(0x66000000),
+      blurRadius: 18,
+      offset: Offset(0, 8),
+    ),
+  ];
+
+  /// A lifted shadow used on hover, with an accent-tinted glow.
+  static const List<BoxShadow> hoverShadow = <BoxShadow>[
+    BoxShadow(
+      color: Color(0x80000000),
+      blurRadius: 26,
+      offset: Offset(0, 12),
+    ),
+    BoxShadow(
+      color: Color(0x337FA6FF),
+      blurRadius: 30,
+      spreadRadius: -6,
+      offset: Offset(0, 6),
+    ),
+  ];
+
+  /// A hairline border used around cards and pills.
+  static const Border hairlineBorder = Border.fromBorderSide(
+    BorderSide(color: AppPalette.hairline),
+  );
+}
+
 /// Builds and exposes the application's dark theme.
 ///
 /// [AppTheme.dark] is the single [ThemeData] the root `MaterialApp` applies so
@@ -394,14 +509,24 @@ class AppTheme {
       cardTheme: const CardThemeData(
         color: AppPalette.surface,
         surfaceTintColor: AppPalette.surface,
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: AppStyle.cardRadius,
+          side: BorderSide(color: AppPalette.hairline),
+        ),
       ),
       dialogTheme: const DialogThemeData(
         backgroundColor: AppPalette.surface,
         surfaceTintColor: AppPalette.surface,
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: AppStyle.cardRadius,
+          side: BorderSide(color: AppPalette.hairline),
+        ),
         titleTextStyle: TextStyle(
           color: AppPalette.textPrimary,
           fontSize: 20,
-          fontWeight: FontWeight.w600,
+          fontWeight: FontWeight.w700,
         ),
         contentTextStyle: TextStyle(color: AppPalette.textPrimary),
       ),
@@ -421,6 +546,12 @@ class AppTheme {
         backgroundColor: AppPalette.surfaceVariant,
         contentTextStyle: TextStyle(color: AppPalette.textPrimary),
         actionTextColor: AppPalette.primary,
+        behavior: SnackBarBehavior.floating,
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: AppStyle.controlRadius,
+          side: BorderSide(color: AppPalette.hairline),
+        ),
       ),
       // The flutter_quill `EditorToolbar` renders each control as an
       // `IconButton` (unselected) or `IconButton.filled` (active/toggled),
@@ -480,25 +611,66 @@ class AppTheme {
         textStyle: TextStyle(color: AppPalette.textPrimary),
       ),
       tooltipTheme: const TooltipThemeData(
-        decoration: BoxDecoration(color: AppPalette.surfaceVariant),
+        decoration: BoxDecoration(
+          color: AppPalette.surfaceVariant,
+          borderRadius: AppStyle.pillRadius,
+          border: Border.fromBorderSide(
+            BorderSide(color: AppPalette.hairline),
+          ),
+        ),
         textStyle: TextStyle(color: AppPalette.textPrimary),
       ),
       elevatedButtonTheme: const ElevatedButtonThemeData(
         style: ButtonStyle(
           backgroundColor: WidgetStatePropertyAll(AppPalette.primary),
           foregroundColor: WidgetStatePropertyAll(AppPalette.onPrimary),
+          elevation: WidgetStatePropertyAll(0),
+          padding: WidgetStatePropertyAll(
+            EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+          ),
+          textStyle: WidgetStatePropertyAll(
+            TextStyle(fontWeight: FontWeight.w600),
+          ),
+          shape: WidgetStatePropertyAll(
+            RoundedRectangleBorder(borderRadius: AppStyle.controlRadius),
+          ),
+        ),
+      ),
+      filledButtonTheme: const FilledButtonThemeData(
+        style: ButtonStyle(
+          backgroundColor: WidgetStatePropertyAll(AppPalette.primary),
+          foregroundColor: WidgetStatePropertyAll(AppPalette.onPrimary),
+          elevation: WidgetStatePropertyAll(0),
+          padding: WidgetStatePropertyAll(
+            EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+          ),
+          textStyle: WidgetStatePropertyAll(
+            TextStyle(fontWeight: FontWeight.w600),
+          ),
+          shape: WidgetStatePropertyAll(
+            RoundedRectangleBorder(borderRadius: AppStyle.controlRadius),
+          ),
         ),
       ),
       textButtonTheme: const TextButtonThemeData(
         style: ButtonStyle(
           foregroundColor: WidgetStatePropertyAll(AppPalette.primary),
+          shape: WidgetStatePropertyAll(
+            RoundedRectangleBorder(borderRadius: AppStyle.controlRadius),
+          ),
         ),
       ),
       outlinedButtonTheme: const OutlinedButtonThemeData(
         style: ButtonStyle(
           foregroundColor: WidgetStatePropertyAll(AppPalette.primary),
           side: WidgetStatePropertyAll(
-            BorderSide(color: AppPalette.outline),
+            BorderSide(color: AppPalette.hairline),
+          ),
+          padding: WidgetStatePropertyAll(
+            EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+          ),
+          shape: WidgetStatePropertyAll(
+            RoundedRectangleBorder(borderRadius: AppStyle.controlRadius),
           ),
         ),
       ),
@@ -507,17 +679,26 @@ class AppTheme {
         fillColor: AppPalette.surfaceVariant,
         hintStyle: TextStyle(color: AppPalette.textSecondary),
         labelStyle: TextStyle(color: AppPalette.textSecondary),
+        contentPadding: EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         border: OutlineInputBorder(
-          borderSide: BorderSide(color: AppPalette.outline),
+          borderRadius: AppStyle.controlRadius,
+          borderSide: BorderSide(color: AppPalette.hairline),
         ),
         enabledBorder: OutlineInputBorder(
-          borderSide: BorderSide(color: AppPalette.outline),
+          borderRadius: AppStyle.controlRadius,
+          borderSide: BorderSide(color: AppPalette.hairline),
         ),
         focusedBorder: OutlineInputBorder(
-          borderSide: BorderSide(color: AppPalette.primary),
+          borderRadius: AppStyle.controlRadius,
+          borderSide: BorderSide(color: AppPalette.primary, width: 2),
         ),
         errorBorder: OutlineInputBorder(
+          borderRadius: AppStyle.controlRadius,
           borderSide: BorderSide(color: AppPalette.error),
+        ),
+        focusedErrorBorder: OutlineInputBorder(
+          borderRadius: AppStyle.controlRadius,
+          borderSide: BorderSide(color: AppPalette.error, width: 2),
         ),
         errorStyle: TextStyle(color: AppPalette.error),
       ),

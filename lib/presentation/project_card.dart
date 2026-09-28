@@ -44,7 +44,7 @@ String projectDisplayName(String storedName) {
 /// (Req 4.1) controls, each surfaced as a callback the Dashboard forwards to
 /// the authoritative `AppNavigationState` flow. Colors come only from
 /// [AppPalette] (Req 18.2, 18.5).
-class ProjectCard extends StatelessWidget {
+class ProjectCard extends StatefulWidget {
   /// The Project this tile represents. Its stored [Project.name] is read but
   /// never modified.
   final Project project;
@@ -75,55 +75,125 @@ class ProjectCard extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
-    final String shown = projectDisplayName(project.name);
+  State<ProjectCard> createState() => _ProjectCardState();
+}
 
-    // A raised surface tile above the darkest background. The Card / InkWell
-    // paint on the palette surface so ink splashes and the selected state have
-    // a surface to render on without falling back to a default color
-    // (Req 18.2, 18.5).
-    return Card(
-      color: AppPalette.surface,
-      surfaceTintColor: AppPalette.surface,
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onOpen,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 4, 8),
-          child: Row(
-            children: <Widget>[
-              // The project Name (Req 1.1). Long names ellipsize rather than
-              // wrap so the tile keeps a stable single-line height.
-              Expanded(
-                child: Text(
-                  shown,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: AppPalette.textPrimary,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
+class _ProjectCardState extends State<ProjectCard> {
+  /// Whether the pointer is currently over the card, used to raise it with a
+  /// soft accent-tinted shadow and reveal its controls (a modern hover lift).
+  bool _hovered = false;
+
+  /// The first letter of the display name, uppercased, for the gradient avatar
+  /// chip. Falls back to a document glyph when the name has no letter.
+  String get _initial {
+    final String shown = projectDisplayName(widget.project.name).trim();
+    if (shown.isEmpty) return '';
+    return shown.characters.first.toUpperCase();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final String shown = projectDisplayName(widget.project.name);
+
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 160),
+        curve: Curves.easeOut,
+        transform: _hovered
+            ? Matrix4.translationValues(0, -2, 0)
+            : Matrix4.identity(),
+        decoration: BoxDecoration(
+          gradient: AppStyle.cardSurface,
+          borderRadius: AppStyle.cardRadius,
+          border: Border.all(
+            color: _hovered ? AppPalette.primary : AppPalette.hairline,
+          ),
+          boxShadow: _hovered ? AppStyle.hoverShadow : AppStyle.cardShadow,
+        ),
+        child: Material(
+          type: MaterialType.transparency,
+          child: InkWell(
+            onTap: widget.onOpen,
+            borderRadius: AppStyle.cardRadius,
+            hoverColor: AppPalette.hoverOverlay,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(14, 10, 6, 10),
+              child: Row(
+                children: <Widget>[
+                  _buildAvatar(),
+                  const SizedBox(width: 12),
+                  // The project Name (Req 1.1). Long names ellipsize rather
+                  // than wrap so the tile keeps a stable single-line height.
+                  Expanded(
+                    child: Text(
+                      shown,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: AppPalette.textPrimary,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                   ),
-                ),
+                  // Trailing rename / delete controls (Req 3.1, 4.1). Each is
+                  // shown only when its callback is provided.
+                  if (widget.onRename != null)
+                    IconButton(
+                      tooltip: 'Rename project',
+                      visualDensity: VisualDensity.compact,
+                      icon: const Icon(
+                        Icons.edit_outlined,
+                        size: 20,
+                        color: AppPalette.textSecondary,
+                      ),
+                      onPressed: widget.onRename,
+                    ),
+                  if (widget.onDelete != null)
+                    IconButton(
+                      tooltip: 'Delete project',
+                      visualDensity: VisualDensity.compact,
+                      icon: const Icon(
+                        Icons.delete_outline,
+                        size: 20,
+                        color: AppPalette.error,
+                      ),
+                      onPressed: widget.onDelete,
+                    ),
+                ],
               ),
-              // Trailing rename / delete controls (Req 3.1, 4.1). Each is shown
-              // only when its callback is provided.
-              if (onRename != null)
-                IconButton(
-                  tooltip: 'Rename project',
-                  icon: const Icon(Icons.edit, color: AppPalette.textSecondary),
-                  onPressed: onRename,
-                ),
-              if (onDelete != null)
-                IconButton(
-                  tooltip: 'Delete project',
-                  icon: const Icon(Icons.delete, color: AppPalette.error),
-                  onPressed: onDelete,
-                ),
-            ],
+            ),
           ),
         ),
       ),
+    );
+  }
+
+  /// The gradient avatar chip carrying the project's initial — a small modern
+  /// touch that gives every card a distinct, colorful anchor.
+  Widget _buildAvatar() {
+    final String initial = _initial;
+    return Container(
+      width: 40,
+      height: 40,
+      alignment: Alignment.center,
+      decoration: const BoxDecoration(
+        gradient: AppStyle.accent,
+        borderRadius: AppStyle.controlRadius,
+      ),
+      child: initial.isEmpty
+          ? const Icon(Icons.menu_book_rounded,
+              size: 20, color: AppPalette.onPrimary)
+          : Text(
+              initial,
+              style: const TextStyle(
+                color: AppPalette.onPrimary,
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
     );
   }
 }

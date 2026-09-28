@@ -265,9 +265,17 @@ class _EditorViewState extends State<EditorView> {
   /// editor tool").
   Widget _buildToolbarRow(BuildContext context) {
     return Container(
-      color: AppPalette.surface,
+      decoration: const BoxDecoration(
+        color: AppPalette.surface,
+        border: Border(bottom: BorderSide(color: AppPalette.hairline)),
+      ),
+      padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
         children: <Widget>[
+          // The autosave indicator is pinned to the top-left of the toolbar
+          // line so the writer can see at a glance that their text is being
+          // saved.
+          _buildSaveIndicator(context),
           Expanded(child: EditorToolbar(controller: _controller!)),
           const SizedBox(width: 4),
           IconButton(
@@ -294,6 +302,86 @@ class _EditorViewState extends State<EditorView> {
           ),
           const SizedBox(width: 4),
         ],
+      ),
+    );
+  }
+
+  /// The autosave status indicator shown at the top-left of the toolbar line.
+  ///
+  /// It reflects [ProjectWorkspaceState.saveStatus]: a spinner with "Saving…"
+  /// while an edit is unsaved / being written, a check with "Saved" once the
+  /// content is on disk, and a warning with "Save failed" if the last save
+  /// errored. Before any edit is made to the current document (idle) it renders
+  /// nothing, keeping the toolbar clean until the writer starts typing.
+  Widget _buildSaveIndicator(BuildContext context) {
+    final SaveStatus status = context.select<ProjectWorkspaceState, SaveStatus>(
+      (ProjectWorkspaceState s) => s.saveStatus,
+    );
+
+    final TextStyle? labelStyle = Theme.of(context).textTheme.bodySmall;
+
+    late final Widget leading;
+    late final String label;
+    late final Color color;
+
+    switch (status) {
+      case SaveStatus.idle:
+        return const SizedBox(width: 12);
+      case SaveStatus.saving:
+        color = AppPalette.textSecondary;
+        label = 'Saving…';
+        leading = const SizedBox(
+          width: 12,
+          height: 12,
+          child: CircularProgressIndicator(
+            strokeWidth: 2,
+            valueColor: AlwaysStoppedAnimation<Color>(AppPalette.textSecondary),
+          ),
+        );
+      case SaveStatus.saved:
+        color = AppPalette.secondary;
+        label = 'Saved';
+        leading = const Icon(
+          Icons.cloud_done_outlined,
+          size: 14,
+          color: AppPalette.secondary,
+        );
+      case SaveStatus.error:
+        color = AppPalette.error;
+        label = 'Save failed';
+        leading = const Icon(
+          Icons.error_outline,
+          size: 14,
+          color: AppPalette.error,
+        );
+    }
+
+    // A soft, rounded status pill so the indicator reads as a distinct chip
+    // rather than loose text next to the toolbar.
+    return Padding(
+      padding: const EdgeInsets.only(left: 12, right: 4),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: AppPalette.surfaceVariant,
+          borderRadius: AppStyle.pillRadius,
+          border: Border.all(color: AppPalette.hairline),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            leading,
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: labelStyle?.copyWith(
+                color: color,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -334,8 +422,14 @@ class _EditorViewState extends State<EditorView> {
     );
 
     return Container(
-      color: AppPalette.surface,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: <Color>[AppPalette.surface, Color(0xFF0E1729)],
+        ),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
       child: Row(
         children: <Widget>[
           Expanded(
@@ -343,6 +437,7 @@ class _EditorViewState extends State<EditorView> {
                 ? titleText
                 : InkWell(
                     onTap: widget.onRenameRequested,
+                    borderRadius: AppStyle.pillRadius,
                     child: Row(
                       children: <Widget>[
                         Flexible(child: titleText),

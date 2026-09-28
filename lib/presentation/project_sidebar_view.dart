@@ -177,7 +177,16 @@ class _ProjectSidebarViewState extends State<ProjectSidebarView> {
     final bool isEmptyProject = folders.isEmpty && rootDocuments.isEmpty;
 
     return Container(
-      color: AppPalette.surface,
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: <Color>[AppPalette.surface, Color(0xFF0D1526)],
+        ),
+        border: Border(
+          right: BorderSide(color: AppPalette.hairline),
+        ),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
@@ -204,47 +213,77 @@ class _ProjectSidebarViewState extends State<ProjectSidebarView> {
   /// Project Name, and the create-folder (Req 7.1) and create-root-document
   /// (Req 10.1) controls.
   Widget _buildHeader(BuildContext context, ProjectWorkspaceState state) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(4, 12, 4, 12),
-      child: Row(
+    return Container(
+      padding: const EdgeInsets.fromLTRB(8, 12, 8, 12),
+      decoration: const BoxDecoration(
+        border: Border(bottom: BorderSide(color: AppPalette.hairline)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
-          // Req 5.4: return to the Dashboard. Dispatched to the navigation
-          // state, which disposes this workspace and clears the editor.
-          IconButton(
-            tooltip: 'Back to dashboard',
-            icon: const Icon(
-              Icons.arrow_back,
-              color: AppPalette.textSecondary,
-            ),
-            onPressed: () =>
-                context.read<AppNavigationState>().closeProject(),
-          ),
-          Expanded(
-            child: Text(
-              state.project.name,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: AppPalette.textPrimary,
-                fontSize: 18,
-                fontWeight: FontWeight.w600,
+          Row(
+            children: <Widget>[
+              // Req 5.4: return to the Dashboard. Dispatched to the navigation
+              // state, which disposes this workspace and clears the editor.
+              IconButton(
+                tooltip: 'Back to dashboard',
+                style: IconButton.styleFrom(
+                  backgroundColor: AppPalette.surfaceVariant,
+                  shape: const RoundedRectangleBorder(
+                    borderRadius: AppStyle.controlRadius,
+                  ),
+                ),
+                icon: const Icon(
+                  Icons.arrow_back,
+                  size: 20,
+                  color: AppPalette.textSecondary,
+                ),
+                onPressed: () =>
+                    context.read<AppNavigationState>().closeProject(),
               ),
-            ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  state.project.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: AppPalette.textPrimary,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: -0.2,
+                  ),
+                ),
+              ),
+            ],
           ),
-          // Req 7.1: create a folder in the Active_Project.
-          IconButton(
-            tooltip: 'Create folder',
-            icon: const Icon(
-              Icons.create_new_folder_outlined,
-              color: AppPalette.primary,
-            ),
-            onPressed: () => _promptCreateFolder(context, state),
-          ),
-          // Req 10.1: create a Root-Level Document under the project root.
-          IconButton(
-            tooltip: 'Create document',
-            icon: const Icon(Icons.note_add_outlined, color: AppPalette.primary),
-            onPressed: () => state.createDocument(),
+          const SizedBox(height: 10),
+          Row(
+            children: <Widget>[
+              // Req 7.1: create a folder in the Active_Project.
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () => _promptCreateFolder(context, state),
+                  icon: const Icon(Icons.create_new_folder_outlined, size: 18),
+                  label: const Text('Folder'),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              // Req 10.1: create a Root-Level Document under the project root.
+              Expanded(
+                child: FilledButton.icon(
+                  onPressed: () => state.createDocument(),
+                  icon: const Icon(Icons.note_add_outlined, size: 18),
+                  label: const Text('Doc'),
+                  style: FilledButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                  ),
+                ),
+              ),
+            ],
           ),
         ],
       ),
