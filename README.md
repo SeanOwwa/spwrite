@@ -323,6 +323,21 @@ WEB_PORT=9000 ./scripts/install.sh web           # Mac / Linux
 .\scripts\install.ps1 web -WebPort 9000          # Windows
 ```
 
+**On a Linux server with no screen** (for example Ubuntu Server over SSH). The
+Linux app needs a desktop to open its window. On a server, the installer still
+builds it, then offers to install a lightweight desktop (XFCE) with a remote
+desktop server (xrdp) so you can use Spwrite from your own computer:
+
+```bash
+./scripts/install.sh linux                        # on the server; say yes to the remote desktop
+ssh -L 3389:localhost:3389 you@your-server        # on your own computer
+```
+
+Then open a Remote Desktop app (Windows App on Mac, Remote Desktop on Windows,
+Remmina on Linux), connect to `localhost`, log in with your server account,
+and run the `spwrite` path the installer printed. The SSH tunnel keeps the
+remote desktop off the open network.
+
 **The options at a glance:**
 
 | Word you add | What it does |

@@ -33,6 +33,20 @@ All notable changes to Spwrite are recorded here. The format follows
   (used for the remembered export folder). The upgrade only creates the table;
   existing projects, documents, characters, and conversations are untouched.
 
+### Fixed
+
+- **Installing on a Linux server without a screen** (e.g. Ubuntu Server over
+  SSH) failed with "cannot open display" and "Error waiting for a debug
+  connection". The installer now detects a missing graphical session, still
+  builds the app, and offers (apt) to install a lightweight remote desktop
+  (XFCE + xrdp). It then prints how to connect through an SSH tunnel and
+  where the `spwrite` binary is, instead of trying to open a window. The
+  Chromium offer is skipped.
+- New `WEB_HOST` setting (default `localhost`) for the web version's listening
+  address, with a warning when it's opened to the network.
+- The installer now reports the Linux app on ARM (`build/linux/arm64/...`) and
+  uses the correct binary name (`spwrite`).
+
 ## [1.2.1] (Beta) - Unreleased
 
 Covers everything since commit `548d0a4` ("Fix Mac Errors").

@@ -41,6 +41,14 @@
 # Environment variables:
 #   ASSUME_YES=1   Answer "yes" to every prompt (unattended installs).
 #   WEB_PORT=9000  Port for the web version (default: 8080).
+#   WEB_HOST=0.0.0.0  Address the web version listens on (default: localhost).
+#                  Only change this on a trusted network: the dev server has
+#                  no login. On a remote server, prefer an SSH tunnel instead.
+#
+# Servers without a screen (e.g. Ubuntu Server): the Linux app needs a
+# graphical desktop to open its window. The installer detects this, still
+# builds the app, and offers to set up a remote desktop (XFCE + xrdp) so you
+# can open Spwrite from your own computer.
 #
 # Examples:
 #   ./scripts/install.sh web now           # build + run web in this terminal
@@ -69,8 +77,17 @@ done
 PLATFORM="${ARGS[0]:-web}"
 MODE="${ARGS[1]:-now}"
 WEB_PORT="${WEB_PORT:-8080}"
+WEB_HOST="${WEB_HOST:-localhost}"
 ASSUME_YES="${ASSUME_YES:-0}"
 HOST_OS="$(uname -s)"
+
+# A Linux machine with no graphical session (Ubuntu Server, SSH without X
+# forwarding, containers) has neither DISPLAY nor WAYLAND_DISPLAY set. The
+# Linux desktop app cannot open a window there.
+HEADLESS=0
+if [ "$HOST_OS" = "Linux" ] && [ -z "${DISPLAY:-}" ] && [ -z "${WAYLAND_DISPLAY:-}" ]; then
+  HEADLESS=1
+fi
 
 # Official Flutter repository (used for the git fallback install).
 FLUTTER_GIT_URL="https://github.com/flutter/flutter.git"
@@ -571,7 +588,7 @@ bootstrap_linux() {
   fi
 
   # Web: Chrome/Chromium is optional; Flutter needs CHROME_EXECUTABLE for Chromium.
-  if [ "$PLATFORM" = "web" ] && ! linux_chrome_path >/dev/null; then
+  if [ "$PLATFORM" = "web" ] && [ "$HEADLESS" = "0" ] && ! linux_chrome_path >/dev/null; then
     if confirm "Optional: install the Chromium browser for the web version?"; then
       if have snap; then as_root snap install chromium
       else
@@ -708,9 +725,11 @@ report_artifact() {
       fi
       ;;
     linux)
-      local bundle="build/linux/x64/release/bundle"
-      if [ -d "$bundle" ]; then
-        log "Your app is ready: $PROJECT_ROOT/$bundle/writing_app"
+      # x64 or arm64, depending on this machine.
+      local bundle
+      bundle="$(find build/linux -maxdepth 3 -type d -path '*/release/bundle' 2>/dev/null | head -n 1)"
+      if [ -n "$bundle" ] && [ -d "$bundle" ]; then
+        log "Your app is ready: $PROJECT_ROOT/$bundle/spwrite"
         log "Run it directly, or copy the whole 'bundle' folder wherever you like."
       fi
       ;;
@@ -724,19 +743,78 @@ report_artifact() {
 report_artifact
 
 # --- 5. Launch -----------------------------------------------------------
+
+# Headless Linux (no screen, e.g. Ubuntu Server): the app is built, but it
+# can't open a window here. Offer a lightweight desktop + remote desktop
+# server (XFCE + xrdp) so the user can open Spwrite from another computer.
+if [ "$PLATFORM" = "linux" ] && [ "$HEADLESS" = "1" ]; then
+  APP_BIN="$PROJECT_ROOT/$(find build/linux -maxdepth 3 -type d -path '*/release/bundle' 2>/dev/null | head -n 1)/spwrite"
+  warn "This computer has no screen (no DISPLAY / WAYLAND_DISPLAY), so Spwrite can't open its window here."
+  log  "The app built fine: $APP_BIN"
+  detect_linux_pm
+  if [ "$LINUX_PM" = "apt" ] && ! have xrdp; then
+    if confirm "Install a lightweight desktop (XFCE) and a remote desktop server (xrdp) so you can open Spwrite from your own computer? (about 500 MB, needs your password)"; then
+      as_root apt-get update
+      as_root apt-get install -y xfce4 xfce4-terminal dbus-x11 xrdp \
+        || die "Installing the remote desktop failed. Scroll up for details, then re-run."
+      # xrdp starts this session for the user; XFCE is the desktop it opens.
+      printf '%s\n' "startxfce4" >"$HOME/.xsession"
+      as_root adduser xrdp ssl-cert >/dev/null 2>&1 || true
+      as_root systemctl enable --now xrdp || warn "Couldn't start xrdp automatically. Run: sudo systemctl enable --now xrdp"
+      if have ufw && as_root ufw status 2>/dev/null | grep -q "Status: active"; then
+        warn "The firewall (ufw) is on. Remote desktop uses port 3389."
+        warn "Safest: don't open it, and use an SSH tunnel (below). Or allow it: sudo ufw allow 3389/tcp"
+      fi
+    fi
+  fi
+  if have xrdp; then
+    log "Open Spwrite from your Mac or PC:"
+    log "  1. On your computer, open an SSH tunnel (keeps remote desktop private):"
+    log "       ssh -L 3389:localhost:3389 $(id -un)@<this-server-address>"
+    log "  2. Open a Remote Desktop app (Windows App / Microsoft Remote Desktop on Mac,"
+    log "     built-in Remote Desktop on Windows, Remmina on Linux) and connect to: localhost"
+    log "  3. Log in with your server username and password. In the desktop, open a terminal and run:"
+    log "       $APP_BIN"
+  else
+    log "Other ways to see the app:"
+    log "  - Install a desktop on this machine (e.g. sudo apt install ubuntu-desktop-minimal), then reboot."
+    log "  - Copy the folder $(dirname "$APP_BIN") to a Linux PC with a desktop and run 'spwrite' there."
+    log "  - From a computer with an X server (XQuartz on Mac), run: ssh -X $(id -un)@<this-server-address>"
+    log "    then: sudo apt install xauth (once), and run $APP_BIN"
+  fi
+  exit 0
+fi
+
 # Without Chrome, serve the web app and let the user open it in any browser.
+# A screenless server always serves, since it can't open a browser itself.
 WEB_DEVICE="chrome"
 if [ "$PLATFORM" = "web" ]; then
-  if { [ "$HOST_OS" = "Darwin" ] && ! mac_chrome_path >/dev/null; } ||
+  if [ "$HEADLESS" = "1" ]; then
+    WEB_DEVICE="web-server"
+  elif { [ "$HOST_OS" = "Darwin" ] && ! mac_chrome_path >/dev/null; } ||
      { [ "$HOST_OS" = "Linux" ] && ! linux_chrome_path >/dev/null; }; then
     WEB_DEVICE="web-server"
     log "Chrome wasn't found, so the app will be served for any browser you like."
   fi
 fi
 
+# Tells the user how to reach the web version, including from another computer.
+web_hint() {
+  [ "$PLATFORM" = "web" ] || return 0
+  log "Once compiled, open http://localhost:$WEB_PORT"
+  if [ "$HEADLESS" = "1" ] && [ "$WEB_HOST" = "localhost" ]; then
+    log "This server has no screen. To open Spwrite from your own computer, run there:"
+    log "    ssh -L $WEB_PORT:localhost:$WEB_PORT $(id -un)@<this-server-address>"
+    log "  then browse to http://localhost:$WEB_PORT on your computer."
+    log "  (Or start with WEB_HOST=0.0.0.0 to listen on the network -- trusted networks only, there's no login.)"
+  elif [ "$WEB_HOST" != "localhost" ]; then
+    warn "Listening on $WEB_HOST:$WEB_PORT. Anyone who can reach this address can open the app; there's no login."
+  fi
+}
+
 run_cmd() {
   case "$PLATFORM" in
-    web)   flutter run -d "$WEB_DEVICE" --web-port "$WEB_PORT" ;;
+    web)   flutter run -d "$WEB_DEVICE" --web-hostname "$WEB_HOST" --web-port "$WEB_PORT" ;;
     macos) flutter run -d macos ;;
     linux) flutter run -d linux ;;
   esac
@@ -747,13 +825,13 @@ if [ "$MODE" = "background" ]; then
   log "Launching $PLATFORM in the background. Logs: $LOG_FILE"
   # nohup + & detaches the process from this terminal session. Values are
   # passed through the environment so no quoting can break the inner command.
-  PLATFORM="$PLATFORM" WEB_PORT="$WEB_PORT" WEB_DEVICE="$WEB_DEVICE" \
+  PLATFORM="$PLATFORM" WEB_PORT="$WEB_PORT" WEB_HOST="$WEB_HOST" WEB_DEVICE="$WEB_DEVICE" \
     nohup bash -c "$(declare -f run_cmd); run_cmd" >"$LOG_FILE" 2>&1 &
   echo $! >"$PROJECT_ROOT/spwrite-$PLATFORM.pid"
   log "Started (PID $(cat "$PROJECT_ROOT/spwrite-$PLATFORM.pid")). Tail logs with: tail -f \"$LOG_FILE\""
-  if [ "$PLATFORM" = "web" ]; then log "Once compiled, open http://localhost:$WEB_PORT"; fi
+  web_hint
 else
   log "Launching $PLATFORM in this terminal (Ctrl+C to stop)..."
-  if [ "$PLATFORM" = "web" ]; then log "Once compiled, open http://localhost:$WEB_PORT"; fi
+  web_hint
   run_cmd
 fi
