@@ -18,6 +18,7 @@ import '../state/character_panel_state.dart';
 import '../state/load_status.dart';
 import '../theme/app_theme.dart';
 import 'character_edit_view.dart';
+import 'panel_header.dart';
 
 /// The right-hand Character Panel sidebar. [onClose] hides the panel (the
 /// enclosing editor owns the open/closed state).
@@ -63,7 +64,6 @@ class CharacterPanelView extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
           _buildHeader(context, state),
-          const Divider(height: 1, thickness: 1, color: AppPalette.outline),
           Expanded(child: _buildBody(context, state)),
         ],
       ),
@@ -73,35 +73,25 @@ class CharacterPanelView extends StatelessWidget {
   /// The panel header: a "Characters" title, an add (+) control, and a close
   /// control.
   Widget _buildHeader(BuildContext context, CharacterPanelState state) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 10, 6, 10),
-      child: Row(
-        children: <Widget>[
-          const Icon(Icons.people_alt_outlined,
-              size: 20, color: AppPalette.secondary),
-          const SizedBox(width: 8),
-          const Expanded(
-            child: Text(
-              'Characters',
-              style: TextStyle(
-                color: AppPalette.textPrimary,
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-          IconButton(
-            tooltip: 'Add character',
-            icon: const Icon(Icons.add, color: AppPalette.primary),
-            onPressed: () => _addCharacter(context, state),
-          ),
-          IconButton(
-            tooltip: 'Close panel',
-            icon: const Icon(Icons.close, color: AppPalette.textSecondary),
-            onPressed: onClose,
-          ),
-        ],
-      ),
+    final int count = state.characters.length;
+    return PanelHeader(
+      icon: Icons.people_alt_outlined,
+      title: 'Characters',
+      subtitle: count == 0
+          ? 'Your cast'
+          : (count == 1 ? '1 character' : '$count characters'),
+      actions: <Widget>[
+        IconButton(
+          tooltip: 'Add character',
+          icon: const Icon(Icons.add, color: AppPalette.primary),
+          onPressed: () => _addCharacter(context, state),
+        ),
+        IconButton(
+          tooltip: 'Close panel',
+          icon: const Icon(Icons.close, color: AppPalette.textSecondary),
+          onPressed: onClose,
+        ),
+      ],
     );
   }
 
@@ -142,12 +132,17 @@ class CharacterPanelView extends StatelessWidget {
 
     final List<Character> characters = state.characters;
     return ListView.builder(
-      padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.md,
+        AppSpacing.md,
+        AppSpacing.md,
+        AppSpacing.xl,
+      ),
       itemCount: characters.length,
       itemBuilder: (BuildContext context, int index) {
         final Character character = characters[index];
         return Padding(
-          padding: const EdgeInsets.only(bottom: 10),
+          padding: const EdgeInsets.only(bottom: AppSpacing.sm + 2),
           child: _CharacterCard(
             character: character,
             onEdit: () => _openEditor(context, state, character),
@@ -194,13 +189,17 @@ class _CharacterCardState extends State<_CharacterCard> {
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
       onExit: (_) => setState(() => _hovered = false),
-      child: Container(
+      child: AnimatedContainer(
+        duration: AppMotion.fast,
+        curve: AppMotion.curve,
         decoration: BoxDecoration(
           color: _hovered ? AppPalette.surfaceVariant : AppPalette.background,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: AppPalette.outline),
+          borderRadius: AppStyle.controlRadius,
+          border: Border.all(
+            color: _hovered ? AppPalette.primary : AppPalette.hairline,
+          ),
         ),
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(AppSpacing.md),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
@@ -291,10 +290,14 @@ class _CharacterCardState extends State<_CharacterCard> {
       decoration: BoxDecoration(
         color: AppPalette.surfaceVariant,
         shape: BoxShape.circle,
-        border: Border.all(color: AppPalette.outline),
+        border: Border.all(color: AppPalette.hairline),
       ),
       child: c.image != null
-          ? Image.memory(c.image!, fit: BoxFit.cover)
+          ? Image.memory(
+              c.image!,
+              fit: BoxFit.cover,
+              semanticLabel: 'Portrait of ${c.displayName}',
+            )
           : const Icon(Icons.person_outline,
               color: AppPalette.textSecondary, size: 24),
     );

@@ -7,7 +7,14 @@
 /// Timestamps ([Project.createdAt], [Project.modifiedAt]) are persisted as
 /// integer milliseconds since the Unix epoch in UTC for stable,
 /// timezone-independent ordering and round-tripping (Req 17.1).
+///
+/// A project may carry an optional cover photo ([Project.coverImage]): JPEG
+/// bytes already normalized to 1600 × 2560 px, stored as a BLOB exactly like a
+/// character portrait so it travels with the project on every platform
+/// (schema v7).
 library;
+
+import 'dart:typed_data';
 
 /// SQLite column names for the `projects` table. Centralized so the entity's
 /// [Project.toRow]/[Project.fromRow] and the repository's SQL agree on the
@@ -19,6 +26,10 @@ class ProjectColumns {
   static const String name = 'name';
   static const String createdAt = 'created_at';
   static const String modifiedAt = 'modified_at';
+
+  /// The cover photo bytes (a BLOB), or NULL when the project has no cover
+  /// (schema v7).
+  static const String coverImage = 'cover_image';
 }
 
 /// An immutable project: a name, a unique identifier, and creation /
@@ -37,11 +48,16 @@ class Project {
   /// Last-modified timestamp (Req 2.2, 17.1).
   final DateTime modifiedAt;
 
+  /// The normalized cover photo (JPEG, 1600 × 2560 px), or `null` when the
+  /// project has no cover.
+  final Uint8List? coverImage;
+
   const Project({
     required this.id,
     required this.name,
     required this.createdAt,
     required this.modifiedAt,
+    this.coverImage,
   });
 
   /// Creates a brand-new project with a last-modified timestamp equal to its
@@ -50,46 +66,66 @@ class Project {
     required String id,
     required String name,
     required DateTime now,
+    Uint8List? coverImage,
   }) {
     return Project(
       id: id,
       name: name,
       createdAt: now,
       modifiedAt: now, // Req 2.2: modified == created on creation
+      coverImage: coverImage,
     );
   }
 
   /// Returns a copy of this project with the given fields replaced. Only the
-  /// fields that change over a project's lifetime (name and the last-modified
-  /// timestamp) may be overridden; [id] and [createdAt] are immutable for the
-  /// life of the project.
+  /// fields that change over a project's lifetime (name, cover, and the
+  /// last-modified timestamp) may be overridden; [id] and [createdAt] are
+  /// immutable for the life of the project.
+  ///
+  /// Because [coverImage] is nullable and removing it is a valid edit, an
+  /// explicit [clearCoverImage] flag distinguishes "leave the cover unchanged"
+  /// (default) from "remove the cover" (mirroring `Character.copyWith`).
   Project copyWith({
     String? name,
     DateTime? modifiedAt,
+    Uint8List? coverImage,
+    bool clearCoverImage = false,
   }) {
     return Project(
       id: id,
       name: name ?? this.name,
       createdAt: createdAt,
       modifiedAt: modifiedAt ?? this.modifiedAt,
+      coverImage: clearCoverImage ? null : (coverImage ?? this.coverImage),
     );
   }
 
   /// Serializes this entity to a SQLite row. Timestamps are written as integer
-  /// milliseconds since the Unix epoch in UTC (Req 17.1).
+  /// milliseconds since the Unix epoch in UTC (Req 17.1). A null [coverImage]
+  /// is stored as SQL NULL.
   Map<String, Object?> toRow() {
     return <String, Object?>{
       ProjectColumns.id: id,
       ProjectColumns.name: name,
       ProjectColumns.createdAt: createdAt.toUtc().millisecondsSinceEpoch,
       ProjectColumns.modifiedAt: modifiedAt.toUtc().millisecondsSinceEpoch,
+      ProjectColumns.coverImage: coverImage,
     };
   }
 
   /// Deserializes a [Project] from a SQLite row. Timestamps are read from
   /// integer milliseconds since the Unix epoch and reconstructed as UTC
-  /// [DateTime]s (Req 17.1).
+  /// [DateTime]s (Req 17.1). The cover column may come back as a [Uint8List]
+  /// or a plain [List<int>] depending on the platform factory (or be absent on
+  /// a row read before the v7 migration), so it is normalized to [Uint8List];
+  /// NULL / absent yields a null [coverImage].
   factory Project.fromRow(Map<String, Object?> row) {
+    final Object? rawCover = row[ProjectColumns.coverImage];
+    final Uint8List? cover = rawCover == null
+        ? null
+        : (rawCover is Uint8List
+            ? rawCover
+            : Uint8List.fromList((rawCover as List).cast<int>()));
     return Project(
       id: row[ProjectColumns.id]! as String,
       name: row[ProjectColumns.name]! as String,
@@ -101,6 +137,7 @@ class Project {
         (row[ProjectColumns.modifiedAt]! as num).toInt(),
         isUtc: true,
       ),
+      coverImage: cover,
     );
   }
 
@@ -113,7 +150,8 @@ class Project {
         other.createdAt.toUtc().millisecondsSinceEpoch ==
             createdAt.toUtc().millisecondsSinceEpoch &&
         other.modifiedAt.toUtc().millisecondsSinceEpoch ==
-            modifiedAt.toUtc().millisecondsSinceEpoch;
+            modifiedAt.toUtc().millisecondsSinceEpoch &&
+        _bytesEqual(other.coverImage, coverImage);
   }
 
   @override
@@ -123,6 +161,7 @@ class Project {
       name,
       createdAt.toUtc().millisecondsSinceEpoch,
       modifiedAt.toUtc().millisecondsSinceEpoch,
+      coverImage?.length,
     );
   }
 
@@ -130,8 +169,20 @@ class Project {
   String toString() {
     return 'Project(id: $id, name: $name, '
         'createdAt: ${createdAt.toUtc().toIso8601String()}, '
-        'modifiedAt: ${modifiedAt.toUtc().toIso8601String()})';
+        'modifiedAt: ${modifiedAt.toUtc().toIso8601String()}, '
+        'hasCover: ${coverImage != null})';
   }
+}
+
+/// Byte-wise equality for two optional byte buffers.
+bool _bytesEqual(Uint8List? a, Uint8List? b) {
+  if (identical(a, b)) return true;
+  if (a == null || b == null) return false;
+  if (a.length != b.length) return false;
+  for (int i = 0; i < a.length; i++) {
+    if (a[i] != b[i]) return false;
+  }
+  return true;
 }
 
 /// The canonical order for the Dashboard's project list: last-modified

@@ -1,14 +1,16 @@
 /// Presentation layer: [ProjectCard], one tile of the Dashboard's project
-/// list.
+/// grid.
 ///
-/// A card shows a single [Project]'s Name (Req 1.1), opens the project when the
-/// tile is tapped (Req 5.1), and exposes trailing rename (Req 3.1) and delete
-/// (Req 4.1) controls. It holds no persistence or navigation logic itself: the
-/// gestures are surfaced as callbacks ([onOpen], [onRename], [onDelete]) that
-/// the `DashboardView` wires to the corresponding `AppNavigationState` intents
-/// (`openProject`, `renameProject`, `deleteProject`). This mirrors the
-/// callback-based `DocumentListItem` convention from v1 and keeps the tile a
-/// pure, testable widget.
+/// A card is a portrait book-cover tile: the project's cover photo (or the
+/// colorful initial badge when it has none) on top at a 1:1.6 ratio, and a
+/// footer with the project's Name (Req 1.1), its last-edited date, and the
+/// edit (Req 3.1) and delete (Req 4.1) controls. Tapping / pressing Enter on
+/// the card opens the project (Req 5.1).
+///
+/// It holds no persistence or navigation logic itself: the gestures are
+/// surfaced as callbacks ([onOpen], [onRename], [onDelete]) that the
+/// `DashboardView` wires to the corresponding `AppNavigationState` intents.
+/// This keeps the tile a pure, testable widget.
 ///
 /// Every color the card assigns is drawn from [AppPalette] so the tile never
 /// falls back to a light-mode or system-default color (Req 18.2, 18.5).
@@ -18,46 +20,40 @@ import 'package:flutter/material.dart';
 
 import '../domain/project.dart';
 import '../theme/app_theme.dart';
+import 'project_cover.dart';
 
-/// The placeholder shown when a [Project] has an empty / whitespace-only Name,
-/// so an unnamed project still presents a readable label on the Dashboard.
-const String kUntitledProjectPlaceholder = 'Untitled Project';
+export 'project_cover.dart' show kUntitledProjectPlaceholder, projectDisplayName;
 
-/// Transforms a Project's stored Name into the label the Dashboard displays,
-/// without altering the stored Name.
-///
-/// Returns [kUntitledProjectPlaceholder] when [storedName] trims to empty
-/// (empty or whitespace-only); otherwise returns [storedName] unchanged. The
-/// tile relies on text overflow ellipsis rather than hard truncation, so the
-/// full name is retained for display and layout.
-String projectDisplayName(String storedName) {
-  if (storedName.trim().isEmpty) {
-    return kUntitledProjectPlaceholder;
-  }
-  return storedName;
+/// Formats [when] (UTC) as a short local date such as "Sep 3, 2026".
+String formatProjectDate(DateTime when) {
+  const List<String> months = <String>[
+    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+  ];
+  final DateTime local = when.toLocal();
+  return '${months[local.month - 1]} ${local.day}, ${local.year}';
 }
 
-/// A single project tile on the Dashboard.
-///
-/// Renders the Project's [projectDisplayName] and opens the project on tap
-/// (Req 1.1, 5.1). The trailing slot holds the rename (Req 3.1) and delete
-/// (Req 4.1) controls, each surfaced as a callback the Dashboard forwards to
-/// the authoritative `AppNavigationState` flow. Colors come only from
-/// [AppPalette] (Req 18.2, 18.5).
+/// A single project tile on the Dashboard: cover on top, name / date /
+/// controls below. Colors come only from [AppPalette] (Req 18.2, 18.5).
 class ProjectCard extends StatefulWidget {
+  /// The height of the footer below the cover. The Dashboard grid sizes each
+  /// cell as `width × 1.6 + footerHeight` so the cover keeps its 1:1.6 shape.
+  static const double footerHeight = 64;
+
   /// The Project this tile represents. Its stored [Project.name] is read but
   /// never modified.
   final Project project;
 
-  /// Called when the user taps the tile to open the project. The Dashboard
-  /// forwards this to `AppNavigationState.openProject` (Req 5.1). When `null`
-  /// the tile is not tappable.
+  /// Called when the user activates the tile to open the project. The
+  /// Dashboard forwards this to `AppNavigationState.openProject` (Req 5.1).
+  /// When `null` the tile is not tappable.
   final VoidCallback? onOpen;
 
-  /// Called when the user activates the rename control. The Dashboard opens the
-  /// inline name field and forwards the result to
-  /// `AppNavigationState.renameProject` (Req 3.1). When `null` the rename
-  /// control is hidden.
+  /// Called when the user activates the edit control (rename + cover photo).
+  /// The Dashboard opens the project dialog and forwards the result to
+  /// `AppNavigationState.updateProject` (Req 3.1). When `null` the control is
+  /// hidden.
   final VoidCallback? onRename;
 
   /// Called when the user activates the delete control. The Dashboard shows the
@@ -79,121 +75,138 @@ class ProjectCard extends StatefulWidget {
 }
 
 class _ProjectCardState extends State<ProjectCard> {
-  /// Whether the pointer is currently over the card, used to raise it with a
-  /// soft accent-tinted shadow and reveal its controls (a modern hover lift).
+  /// Whether the pointer is over the card (hover lift + accent border).
   bool _hovered = false;
 
-  /// The first letter of the display name, uppercased, for the gradient avatar
-  /// chip. Falls back to a document glyph when the name has no letter.
-  String get _initial {
-    final String shown = projectDisplayName(widget.project.name).trim();
-    if (shown.isEmpty) return '';
-    return shown.characters.first.toUpperCase();
-  }
+  /// Whether the card itself holds keyboard focus (visible focus ring).
+  bool _focused = false;
 
   @override
   Widget build(BuildContext context) {
-    final String shown = projectDisplayName(widget.project.name);
+    final Project project = widget.project;
+    final String shown = projectDisplayName(project.name);
+    final bool active = _hovered || _focused;
+    final TextTheme text = Theme.of(context).textTheme;
 
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
       onExit: (_) => setState(() => _hovered = false),
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 160),
-        curve: Curves.easeOut,
+        duration: AppMotion.fast,
+        curve: AppMotion.curve,
         transform: _hovered
-            ? Matrix4.translationValues(0, -2, 0)
+            ? Matrix4.translationValues(0, -3, 0)
             : Matrix4.identity(),
         decoration: BoxDecoration(
           gradient: AppStyle.cardSurface,
           borderRadius: AppStyle.cardRadius,
           border: Border.all(
-            color: _hovered ? AppPalette.primary : AppPalette.hairline,
+            color: _focused
+                ? AppPalette.focusRing
+                : (_hovered ? AppPalette.primary : AppPalette.hairline),
+            width: _focused ? AppStyle.focusRingWidth : 1,
           ),
-          boxShadow: _hovered ? AppStyle.hoverShadow : AppStyle.cardShadow,
+          boxShadow: active ? AppStyle.hoverShadow : AppStyle.cardShadow,
         ),
         child: Material(
           type: MaterialType.transparency,
-          child: InkWell(
-            onTap: widget.onOpen,
-            borderRadius: AppStyle.cardRadius,
-            hoverColor: AppPalette.hoverOverlay,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(14, 10, 6, 10),
-              child: Row(
-                children: <Widget>[
-                  _buildAvatar(),
-                  const SizedBox(width: 12),
-                  // The project Name (Req 1.1). Long names ellipsize rather
-                  // than wrap so the tile keeps a stable single-line height.
-                  Expanded(
-                    child: Text(
-                      shown,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: AppPalette.textPrimary,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
+          child: Semantics(
+            button: widget.onOpen != null,
+            child: InkWell(
+              onTap: widget.onOpen,
+              onFocusChange: (bool focused) =>
+                  setState(() => _focused = focused),
+              borderRadius: AppStyle.cardRadius,
+              child: Padding(
+                padding: const EdgeInsets.all(AppSpacing.sm),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: <Widget>[
+                    // The portrait cover (or initial fallback), 1:1.6.
+                    Expanded(
+                      child: Center(
+                        child: AspectRatio(
+                          aspectRatio: AppStyle.coverAspectRatio,
+                          child: ProjectCover(
+                            coverImage: project.coverImage,
+                            projectName: project.name,
+                            initialFontSize: 56,
+                          ),
+                        ),
                       ),
                     ),
-                  ),
-                  // Trailing rename / delete controls (Req 3.1, 4.1). Each is
-                  // shown only when its callback is provided.
-                  if (widget.onRename != null)
-                    IconButton(
-                      tooltip: 'Rename project',
-                      visualDensity: VisualDensity.compact,
-                      icon: const Icon(
-                        Icons.edit_outlined,
-                        size: 20,
-                        color: AppPalette.textSecondary,
+                    SizedBox(
+                      height: ProjectCard.footerHeight - AppSpacing.sm,
+                      child: Row(
+                        children: <Widget>[
+                          const SizedBox(width: AppSpacing.xs),
+                          Expanded(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: <Widget>[
+                                // The project Name (Req 1.1). Long names
+                                // ellipsize so every tile keeps one height.
+                                Text(
+                                  shown,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: text.titleMedium,
+                                ),
+                                const SizedBox(height: AppSpacing.xxs),
+                                Text(
+                                  'Edited ${formatProjectDate(project.modifiedAt)}',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: text.bodySmall,
+                                ),
+                              ],
+                            ),
+                          ),
+                          // Edit / delete controls (Req 3.1, 4.1). Always
+                          // present for keyboard and screen-reader users;
+                          // they brighten when the card is hovered/focused.
+                          AnimatedOpacity(
+                            duration: AppMotion.fast,
+                            opacity: active ? 1 : 0.7,
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: <Widget>[
+                                if (widget.onRename != null)
+                                  IconButton(
+                                    tooltip: 'Edit project',
+                                    visualDensity: VisualDensity.compact,
+                                    icon: const Icon(
+                                      Icons.edit_outlined,
+                                      size: 18,
+                                      color: AppPalette.textSecondary,
+                                    ),
+                                    onPressed: widget.onRename,
+                                  ),
+                                if (widget.onDelete != null)
+                                  IconButton(
+                                    tooltip: 'Delete project',
+                                    visualDensity: VisualDensity.compact,
+                                    icon: const Icon(
+                                      Icons.delete_outline,
+                                      size: 18,
+                                      color: AppPalette.error,
+                                    ),
+                                    onPressed: widget.onDelete,
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ],
                       ),
-                      onPressed: widget.onRename,
                     ),
-                  if (widget.onDelete != null)
-                    IconButton(
-                      tooltip: 'Delete project',
-                      visualDensity: VisualDensity.compact,
-                      icon: const Icon(
-                        Icons.delete_outline,
-                        size: 20,
-                        color: AppPalette.error,
-                      ),
-                      onPressed: widget.onDelete,
-                    ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
         ),
       ),
-    );
-  }
-
-  /// The gradient avatar chip carrying the project's initial — a small modern
-  /// touch that gives every card a distinct, colorful anchor.
-  Widget _buildAvatar() {
-    final String initial = _initial;
-    return Container(
-      width: 40,
-      height: 40,
-      alignment: Alignment.center,
-      decoration: const BoxDecoration(
-        gradient: AppStyle.accent,
-        borderRadius: AppStyle.controlRadius,
-      ),
-      child: initial.isEmpty
-          ? const Icon(Icons.menu_book_rounded,
-              size: 20, color: AppPalette.onPrimary)
-          : Text(
-              initial,
-              style: const TextStyle(
-                color: AppPalette.onPrimary,
-                fontSize: 18,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
     );
   }
 }

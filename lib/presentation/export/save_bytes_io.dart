@@ -1,7 +1,8 @@
-/// Native (desktop / mobile) implementation of [saveBytes]: writes the bytes to
-/// a file in the app documents directory and returns its path. Used to deliver
-/// the exported `.docx` on non-web builds. Selected via the conditional import
-/// in `document_exporter.dart`.
+/// Native (desktop) implementation of [saveBytes]: writes the bytes to
+/// a file in the app documents directory and returns its path. Selected via
+/// the conditional import in `document_exporter.dart`. Only a fallback: the
+/// Export dialog delivers desktop exports through the native Save As flow
+/// (`export_location_service.dart`).
 library;
 
 import 'dart:io';

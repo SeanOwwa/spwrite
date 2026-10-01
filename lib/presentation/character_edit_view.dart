@@ -83,7 +83,7 @@ class _CharacterEditViewState extends State<CharacterEditView> {
   /// working copy.
   ///
   /// Uses `file_selector` (Flutter's first-party picker) so this works on
-  /// macOS, Windows, Linux, web, and mobile alike — unlike image_picker's
+  /// macOS, Windows, Linux, and web alike — unlike image_picker's
   /// gallery source, which is unsupported on desktop. The selected file is read
   /// into memory as bytes and kept in [_imageBytes]; persistence stores those
   /// bytes as a BLOB with the character.

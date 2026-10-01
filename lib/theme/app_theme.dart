@@ -163,6 +163,43 @@ class AppPalette {
   /// Hover overlay tint for interactive rows / cards.
   static const Color hoverOverlay = Color(0x147FA6FF);
 
+  /// Pressed / focused overlay tint, one step stronger than [hoverOverlay].
+  static const Color pressedOverlay = Color(0x297FA6FF);
+
+  /// The keyboard focus ring: the dark-cyan accent, so focus reads clearly
+  /// and distinctly from the blue hover/selection border.
+  static const Color focusRing = secondary;
+
+  /// A deeper navy used as the bottom stop of raised-surface gradients
+  /// (title bar, cards, sidebar).
+  static const Color surfaceDeep = Color(0xFF0E1729);
+
+  /// The mid stop of the ambient app-background wash.
+  static const Color backgroundMid = Color(0xFF0C1226);
+
+  /// The light tile behind the Spwrite logo, whose art is drawn for a light
+  /// background. Non-text (decorative).
+  static const Color logoTile = Color(0xFFFFFFFF);
+
+  /// A translucent navy scrim laid over cover photos behind overlaid
+  /// controls. Non-text on its own; any text drawn over it is textPrimary.
+  static const Color coverScrim = Color(0xB30A0F1E);
+
+  /// Scrollbar thumb tint (non-text).
+  static const Color scrollbarThumb = Color(0x667FA6FF);
+
+  /// Ambient drop-shadow color for raised cards.
+  static const Color shadowAmbient = Color(0x66000000);
+
+  /// Stronger drop-shadow color for lifted (hovered) cards and dialogs.
+  static const Color shadowStrong = Color(0x80000000);
+
+  /// The accent-tinted glow under a hovered card.
+  static const Color shadowGlow = Color(0x337FA6FF);
+
+  /// Fully transparent, for Material surfaces that must not paint.
+  static const Color transparent = Color(0x00000000);
+
   /// Every color defined in the palette. Property 11 asserts each themed color
   /// slot is a member of this set.
   static const List<Color> all = <Color>[
@@ -179,6 +216,19 @@ class AppPalette {
     error,
     onError,
     outline,
+    hairline,
+    sheen,
+    hoverOverlay,
+    pressedOverlay,
+    surfaceDeep,
+    backgroundMid,
+    logoTile,
+    coverScrim,
+    scrollbarThumb,
+    shadowAmbient,
+    shadowStrong,
+    shadowGlow,
+    transparent,
   ];
 
   /// The complete set of foreground-on-background text pairs the theme uses,
@@ -299,6 +349,35 @@ class AppPalette {
   ];
 }
 
+/// The spacing scale. Every padding / gap in the modernized surfaces is drawn
+/// from these steps so rhythm stays consistent across the app.
+class AppSpacing {
+  const AppSpacing._();
+
+  static const double xxs = 2;
+  static const double xs = 4;
+  static const double sm = 8;
+  static const double md = 12;
+  static const double lg = 16;
+  static const double xl = 24;
+  static const double xxl = 32;
+}
+
+/// Motion tokens: short, consistent durations so hover/focus feedback feels
+/// responsive without being showy.
+class AppMotion {
+  const AppMotion._();
+
+  /// Hover / focus / press feedback.
+  static const Duration fast = Duration(milliseconds: 120);
+
+  /// Panel and content transitions.
+  static const Duration medium = Duration(milliseconds: 200);
+
+  /// The standard easing curve.
+  static const Curve curve = Curves.easeOutCubic;
+}
+
 /// Modern, decorative design tokens layered on top of [AppPalette]: corner
 /// radii, gradients, hairline borders, and soft shadows.
 ///
@@ -338,7 +417,7 @@ class AppStyle {
     end: Alignment.bottomRight,
     colors: <Color>[
       AppPalette.background,
-      Color(0xFF0C1226),
+      AppPalette.backgroundMid,
       AppPalette.surface,
     ],
     stops: <double>[0.0, 0.55, 1.0],
@@ -351,8 +430,25 @@ class AppStyle {
     end: Alignment.bottomCenter,
     colors: <Color>[
       AppPalette.surface,
-      Color(0xFF0E1729),
+      AppPalette.surfaceDeep,
     ],
+  );
+
+  /// A vertical surface wash for sidebars and title bars.
+  static const LinearGradient panelSurface = LinearGradient(
+    begin: Alignment.topCenter,
+    end: Alignment.bottomCenter,
+    colors: <Color>[
+      AppPalette.surface,
+      AppPalette.surfaceDeep,
+    ],
+  );
+
+  /// A bottom-up scrim over a cover photo so overlaid controls stay legible.
+  static const LinearGradient coverScrim = LinearGradient(
+    begin: Alignment.bottomCenter,
+    end: Alignment.topCenter,
+    colors: <Color>[AppPalette.coverScrim, AppPalette.transparent],
   );
 
   /// The brand accent gradient (blue → cyan) used for the logo chip, avatars,
@@ -369,7 +465,7 @@ class AppStyle {
   /// Soft ambient shadow for raised cards.
   static const List<BoxShadow> cardShadow = <BoxShadow>[
     BoxShadow(
-      color: Color(0x66000000),
+      color: AppPalette.shadowAmbient,
       blurRadius: 18,
       offset: Offset(0, 8),
     ),
@@ -378,12 +474,12 @@ class AppStyle {
   /// A lifted shadow used on hover, with an accent-tinted glow.
   static const List<BoxShadow> hoverShadow = <BoxShadow>[
     BoxShadow(
-      color: Color(0x80000000),
+      color: AppPalette.shadowStrong,
       blurRadius: 26,
       offset: Offset(0, 12),
     ),
     BoxShadow(
-      color: Color(0x337FA6FF),
+      color: AppPalette.shadowGlow,
       blurRadius: 30,
       spreadRadius: -6,
       offset: Offset(0, 6),
@@ -394,6 +490,13 @@ class AppStyle {
   static const Border hairlineBorder = Border.fromBorderSide(
     BorderSide(color: AppPalette.hairline),
   );
+
+  /// The width of the visible keyboard focus ring.
+  static const double focusRingWidth = 2;
+
+  /// The cover-photo aspect ratio (width ÷ height) used by every cover
+  /// thumbnail: a portrait 1:1.6 book cover.
+  static const double coverAspectRatio = 1 / 1.6;
 }
 
 /// Builds and exposes the application's dark theme.
@@ -472,24 +575,91 @@ class AppTheme {
   static ThemeData _buildDark() {
     const scheme = darkColorScheme;
 
-    // A text theme whose every style uses a palette foreground color.
+    // A text theme whose every style uses a palette foreground color, with a
+    // clear desktop hierarchy: headline (screen titles) → title (panels,
+    // cards) → body → label (buttons, chips, captions).
     const textTheme = TextTheme(
       displayLarge: TextStyle(color: AppPalette.textPrimary),
       displayMedium: TextStyle(color: AppPalette.textPrimary),
       displaySmall: TextStyle(color: AppPalette.textPrimary),
-      headlineLarge: TextStyle(color: AppPalette.textPrimary),
-      headlineMedium: TextStyle(color: AppPalette.textPrimary),
-      headlineSmall: TextStyle(color: AppPalette.textPrimary),
-      titleLarge: TextStyle(color: AppPalette.textPrimary),
-      titleMedium: TextStyle(color: AppPalette.textPrimary),
-      titleSmall: TextStyle(color: AppPalette.textPrimary),
-      bodyLarge: TextStyle(color: AppPalette.textPrimary),
-      bodyMedium: TextStyle(color: AppPalette.textPrimary),
-      bodySmall: TextStyle(color: AppPalette.textSecondary),
-      labelLarge: TextStyle(color: AppPalette.textPrimary),
-      labelMedium: TextStyle(color: AppPalette.textSecondary),
-      labelSmall: TextStyle(color: AppPalette.textSecondary),
+      headlineLarge: TextStyle(
+        color: AppPalette.textPrimary,
+        fontSize: 30,
+        fontWeight: FontWeight.w700,
+        letterSpacing: -0.5,
+      ),
+      headlineMedium: TextStyle(
+        color: AppPalette.textPrimary,
+        fontSize: 26,
+        fontWeight: FontWeight.w700,
+        letterSpacing: -0.4,
+      ),
+      headlineSmall: TextStyle(
+        color: AppPalette.textPrimary,
+        fontSize: 22,
+        fontWeight: FontWeight.w700,
+        letterSpacing: -0.3,
+      ),
+      titleLarge: TextStyle(
+        color: AppPalette.textPrimary,
+        fontSize: 19,
+        fontWeight: FontWeight.w600,
+        letterSpacing: -0.2,
+      ),
+      titleMedium: TextStyle(
+        color: AppPalette.textPrimary,
+        fontSize: 15,
+        fontWeight: FontWeight.w600,
+      ),
+      titleSmall: TextStyle(
+        color: AppPalette.textPrimary,
+        fontSize: 13,
+        fontWeight: FontWeight.w600,
+      ),
+      bodyLarge: TextStyle(color: AppPalette.textPrimary, fontSize: 15),
+      bodyMedium: TextStyle(color: AppPalette.textPrimary, fontSize: 14),
+      bodySmall: TextStyle(color: AppPalette.textSecondary, fontSize: 12.5),
+      labelLarge: TextStyle(
+        color: AppPalette.textPrimary,
+        fontSize: 14,
+        fontWeight: FontWeight.w600,
+      ),
+      labelMedium: TextStyle(
+        color: AppPalette.textSecondary,
+        fontSize: 12,
+        fontWeight: FontWeight.w500,
+      ),
+      labelSmall: TextStyle(
+        color: AppPalette.textSecondary,
+        fontSize: 11,
+        fontWeight: FontWeight.w500,
+        letterSpacing: 0.4,
+      ),
     );
+
+    // A visible focus ring for keyboard navigation, applied to every button
+    // family so Tab focus is always obvious on desktop.
+    BorderSide? focusSide(Set<WidgetState> states) {
+      if (states.contains(WidgetState.focused)) {
+        return const BorderSide(
+          color: AppPalette.focusRing,
+          width: AppStyle.focusRingWidth,
+        );
+      }
+      return null;
+    }
+
+    // Shared hover / focus / press overlays for buttons.
+    Color? overlay(Set<WidgetState> states) {
+      if (states.contains(WidgetState.pressed)) {
+        return AppPalette.pressedOverlay;
+      }
+      if (states.contains(WidgetState.hovered) ||
+          states.contains(WidgetState.focused)) {
+        return AppPalette.hoverOverlay;
+      }
+      return null;
+    }
 
     return ThemeData(
       useMaterial3: true,
@@ -501,6 +671,28 @@ class AppTheme {
       textTheme: textTheme,
       // Ensure the primary swatch never resolves to a Material default.
       primaryColor: AppPalette.primary,
+      // Mouse + keyboard feedback colors for ink responses (cards, rows).
+      hoverColor: AppPalette.hoverOverlay,
+      focusColor: AppPalette.pressedOverlay,
+      highlightColor: AppPalette.pressedOverlay,
+      splashColor: AppPalette.hoverOverlay,
+      // Desktop-visible scrollbars: always show a slim thumb so long lists
+      // advertise that they scroll; the track appears on hover.
+      scrollbarTheme: ScrollbarThemeData(
+        thumbVisibility: const WidgetStatePropertyAll<bool>(true),
+        trackVisibility: WidgetStateProperty.resolveWith<bool>(
+          (Set<WidgetState> states) => states.contains(WidgetState.hovered),
+        ),
+        thickness: const WidgetStatePropertyAll<double>(6),
+        radius: const Radius.circular(AppStyle.radiusSmall),
+        thumbColor: const WidgetStatePropertyAll<Color>(
+          AppPalette.scrollbarThumb,
+        ),
+        trackColor: const WidgetStatePropertyAll<Color>(AppPalette.sheen),
+        trackBorderColor: const WidgetStatePropertyAll<Color>(
+          AppPalette.transparent,
+        ),
+      ),
       appBarTheme: const AppBarTheme(
         backgroundColor: AppPalette.surface,
         foregroundColor: AppPalette.textPrimary,
@@ -519,6 +711,11 @@ class AppTheme {
         backgroundColor: AppPalette.surface,
         surfaceTintColor: AppPalette.surface,
         elevation: 0,
+        shadowColor: AppPalette.shadowStrong,
+        insetPadding: EdgeInsets.symmetric(
+          horizontal: AppSpacing.xl,
+          vertical: AppSpacing.xl,
+        ),
         shape: RoundedRectangleBorder(
           borderRadius: AppStyle.cardRadius,
           side: BorderSide(color: AppPalette.hairline),
@@ -573,8 +770,12 @@ class AppTheme {
             }
             return null;
           }),
-          overlayColor: const WidgetStatePropertyAll(
-            AppPalette.surfaceVariant,
+          overlayColor: WidgetStateProperty.resolveWith<Color?>(overlay),
+          side: WidgetStateProperty.resolveWith<BorderSide?>(focusSide),
+          // Comfortable mouse targets on desktop without bloating toolbars.
+          minimumSize: const WidgetStatePropertyAll(Size(36, 36)),
+          shape: const WidgetStatePropertyAll(
+            RoundedRectangleBorder(borderRadius: AppStyle.controlRadius),
           ),
         ),
       ),
@@ -611,6 +812,7 @@ class AppTheme {
         textStyle: TextStyle(color: AppPalette.textPrimary),
       ),
       tooltipTheme: const TooltipThemeData(
+        waitDuration: Duration(milliseconds: 500),
         decoration: BoxDecoration(
           color: AppPalette.surfaceVariant,
           borderRadius: AppStyle.pillRadius,
@@ -620,56 +822,71 @@ class AppTheme {
         ),
         textStyle: TextStyle(color: AppPalette.textPrimary),
       ),
-      elevatedButtonTheme: const ElevatedButtonThemeData(
+      elevatedButtonTheme: ElevatedButtonThemeData(
         style: ButtonStyle(
-          backgroundColor: WidgetStatePropertyAll(AppPalette.primary),
-          foregroundColor: WidgetStatePropertyAll(AppPalette.onPrimary),
-          elevation: WidgetStatePropertyAll(0),
-          padding: WidgetStatePropertyAll(
+          side: WidgetStateProperty.resolveWith<BorderSide?>(focusSide),
+          backgroundColor: const WidgetStatePropertyAll(AppPalette.primary),
+          foregroundColor: const WidgetStatePropertyAll(AppPalette.onPrimary),
+          elevation: const WidgetStatePropertyAll(0),
+          padding: const WidgetStatePropertyAll(
             EdgeInsets.symmetric(horizontal: 18, vertical: 14),
           ),
-          textStyle: WidgetStatePropertyAll(
+          textStyle: const WidgetStatePropertyAll(
             TextStyle(fontWeight: FontWeight.w600),
           ),
-          shape: WidgetStatePropertyAll(
+          shape: const WidgetStatePropertyAll(
             RoundedRectangleBorder(borderRadius: AppStyle.controlRadius),
           ),
         ),
       ),
-      filledButtonTheme: const FilledButtonThemeData(
+      filledButtonTheme: FilledButtonThemeData(
         style: ButtonStyle(
-          backgroundColor: WidgetStatePropertyAll(AppPalette.primary),
-          foregroundColor: WidgetStatePropertyAll(AppPalette.onPrimary),
-          elevation: WidgetStatePropertyAll(0),
-          padding: WidgetStatePropertyAll(
+          side: WidgetStateProperty.resolveWith<BorderSide?>(focusSide),
+          backgroundColor: WidgetStateProperty.resolveWith<Color?>(
+            (Set<WidgetState> states) => states.contains(WidgetState.disabled)
+                ? AppPalette.surfaceVariant
+                : AppPalette.primary,
+          ),
+          foregroundColor: const WidgetStatePropertyAll(AppPalette.onPrimary),
+          elevation: const WidgetStatePropertyAll(0),
+          padding: const WidgetStatePropertyAll(
             EdgeInsets.symmetric(horizontal: 18, vertical: 14),
           ),
-          textStyle: WidgetStatePropertyAll(
+          textStyle: const WidgetStatePropertyAll(
             TextStyle(fontWeight: FontWeight.w600),
           ),
-          shape: WidgetStatePropertyAll(
+          shape: const WidgetStatePropertyAll(
             RoundedRectangleBorder(borderRadius: AppStyle.controlRadius),
           ),
         ),
       ),
-      textButtonTheme: const TextButtonThemeData(
+      textButtonTheme: TextButtonThemeData(
         style: ButtonStyle(
-          foregroundColor: WidgetStatePropertyAll(AppPalette.primary),
-          shape: WidgetStatePropertyAll(
+          side: WidgetStateProperty.resolveWith<BorderSide?>(focusSide),
+          overlayColor: WidgetStateProperty.resolveWith<Color?>(overlay),
+          foregroundColor: const WidgetStatePropertyAll(AppPalette.primary),
+          shape: const WidgetStatePropertyAll(
             RoundedRectangleBorder(borderRadius: AppStyle.controlRadius),
           ),
         ),
       ),
-      outlinedButtonTheme: const OutlinedButtonThemeData(
+      outlinedButtonTheme: OutlinedButtonThemeData(
         style: ButtonStyle(
-          foregroundColor: WidgetStatePropertyAll(AppPalette.primary),
-          side: WidgetStatePropertyAll(
-            BorderSide(color: AppPalette.hairline),
+          foregroundColor: const WidgetStatePropertyAll(AppPalette.primary),
+          overlayColor: WidgetStateProperty.resolveWith<Color?>(overlay),
+          side: WidgetStateProperty.resolveWith<BorderSide?>(
+            (Set<WidgetState> states) =>
+                focusSide(states) ??
+                BorderSide(
+                  color: states.contains(WidgetState.hovered)
+                      ? AppPalette.primary
+                      : AppPalette.hairline,
+                ),
           ),
-          padding: WidgetStatePropertyAll(
+          padding: const WidgetStatePropertyAll(
             EdgeInsets.symmetric(horizontal: 18, vertical: 14),
           ),
-          shape: WidgetStatePropertyAll(
+          shape: const WidgetStatePropertyAll(
             RoundedRectangleBorder(borderRadius: AppStyle.controlRadius),
           ),
         ),

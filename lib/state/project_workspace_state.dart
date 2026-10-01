@@ -30,6 +30,7 @@ import '../domain/folder.dart';
 import '../domain/folder_repository.dart';
 import '../domain/markdown_document_codec.dart';
 import '../domain/project.dart';
+import '../presentation/export/exportable_document.dart';
 import 'autosave_debouncer.dart';
 import 'load_status.dart';
 
@@ -564,6 +565,117 @@ class ProjectWorkspaceState extends ChangeNotifier {
         .map((String line) => line.trimRight())
         .where((String line) => line.trim().isNotEmpty)
         .toList(growable: false);
+  }
+
+  /// Renders a document's stored Markdown [content] into structured
+  /// [ExportBlock]s for export, using the same [codec] the editor uses to load
+  /// documents. Unlike [contentParagraphs], this preserves the editor's
+  /// formatting: each block carries its paragraph style (heading / list item /
+  /// normal) and its inline runs carry bold / italic / underline /
+  /// strikethrough, so the exporter can mirror what the editor shows rather than
+  /// flattening to plain text.
+  ///
+  /// Blank paragraphs are dropped. On any conversion failure the raw source is
+  /// emitted as plain paragraphs so export never loses the text entirely.
+  List<ExportBlock> contentBlocks(String content) {
+    if (content.trim().isEmpty) return const <ExportBlock>[];
+    try {
+      // Convert Markdown -> Delta. In a Quill Delta, inline formatting (bold,
+      // italic, underline, strike) rides on the text insert ops, while
+      // block-level formatting (header level, list type) rides on the
+      // attributes of the trailing '\n' that closes each line. We accumulate
+      // runs until a newline, then flush a block using the newline's block
+      // attributes.
+      final Delta delta = _codec.markdownToDelta(content);
+
+      final List<ExportBlock> blocks = <ExportBlock>[];
+      List<ExportRun> pending = <ExportRun>[];
+
+      void flush(Map<String, dynamic>? lineAttrs) {
+        // Drop entirely-blank lines (no runs, or only whitespace).
+        final bool hasText =
+            pending.any((ExportRun r) => r.text.trim().isNotEmpty);
+        if (!hasText) {
+          pending = <ExportRun>[];
+          return;
+        }
+        blocks.add(
+          ExportBlock(
+            style: _blockStyleFor(lineAttrs),
+            headingLevel: _headingLevelFor(lineAttrs),
+            runs: pending,
+          ),
+        );
+        pending = <ExportRun>[];
+      }
+
+      for (final Operation op in delta.toList()) {
+        final Object? data = op.data;
+        if (data is! String) continue; // Embeds (images etc.) are unsupported.
+        final Map<String, dynamic>? attrs = op.attributes;
+
+        // Split the insert on newlines. Each newline terminates the current
+        // line; the block-level attributes on the op that *contains* the
+        // newline apply to the line being closed.
+        final List<String> segments = data.split('\n');
+        for (int s = 0; s < segments.length; s++) {
+          final String segment = segments[s];
+          if (segment.isNotEmpty) {
+            pending.add(_runFromAttributes(segment, attrs));
+          }
+          // Every split boundary except the last represents a real '\n'.
+          if (s < segments.length - 1) {
+            flush(attrs);
+          }
+        }
+      }
+      // Flush any trailing runs not terminated by a newline.
+      flush(null);
+
+      return List<ExportBlock>.unmodifiable(blocks);
+    } catch (_) {
+      // Fall back to raw paragraphs so text is never lost on unexpected input.
+      return content
+          .split('\n')
+          .map((String line) => line.trimRight())
+          .where((String line) => line.trim().isNotEmpty)
+          .map(ExportBlock.plain)
+          .toList(growable: false);
+    }
+  }
+
+  /// Builds an [ExportRun] from a text [segment] and its Delta inline
+  /// [attributes] (bold / italic / underline / strike).
+  ExportRun _runFromAttributes(
+    String segment,
+    Map<String, dynamic>? attributes,
+  ) {
+    final Map<String, dynamic> a = attributes ?? const <String, dynamic>{};
+    return ExportRun(
+      text: segment,
+      bold: a['bold'] == true,
+      italic: a['italic'] == true,
+      underline: a['underline'] == true,
+      strikethrough: a['strike'] == true,
+    );
+  }
+
+  /// Maps a line's Delta block [attributes] to an [ExportBlockStyle].
+  ExportBlockStyle _blockStyleFor(Map<String, dynamic>? attributes) {
+    if (attributes == null) return ExportBlockStyle.normal;
+    if (attributes['header'] != null) return ExportBlockStyle.heading;
+    final Object? list = attributes['list'];
+    if (list == 'bullet') return ExportBlockStyle.bulletItem;
+    if (list == 'ordered') return ExportBlockStyle.numberedItem;
+    return ExportBlockStyle.normal;
+  }
+
+  /// Extracts the heading level (1..6) from a line's Delta block [attributes],
+  /// defaulting to 1 when absent or out of range.
+  int _headingLevelFor(Map<String, dynamic>? attributes) {
+    final Object? header = attributes?['header'];
+    if (header is int && header >= 1 && header <= 6) return header;
+    return 1;
   }
 
   /// The `Active_Document`, or `null` when none is selected (Req 11).

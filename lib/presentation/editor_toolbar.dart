@@ -45,7 +45,7 @@ class EditorToolbar extends StatelessWidget {
         // no slot falls back to a light-mode / system-default color
         // (Req 18.2, 18.5).
         color: AppPalette.surface,
-        sectionDividerColor: AppPalette.outline,
+        sectionDividerColor: AppPalette.hairline,
         iconTheme: _darkIconTheme,
 
         // --- Supported controls: on (Req 14.2–14.7) ----------------------
@@ -91,14 +91,29 @@ class EditorToolbar extends StatelessWidget {
   /// Themes the toolbar's icon buttons from the dark palette (Req 18.2, 18.5):
   /// unselected controls in [AppPalette.textSecondary]; the active/selected
   /// control in [AppPalette.primary] over an [AppPalette.surfaceVariant] fill.
+  ///
+  /// Both states share the rounded control shape and the theme's hover/focus
+  /// overlays, so the toolbar reads as a row of modern pill buttons with a
+  /// visible keyboard focus ring.
   static const QuillIconTheme _darkIconTheme = QuillIconTheme(
     iconButtonUnselectedData: IconButtonData(
       color: AppPalette.textSecondary,
+      style: ButtonStyle(
+        shape: WidgetStatePropertyAll(
+          RoundedRectangleBorder(borderRadius: AppStyle.pillRadius),
+        ),
+      ),
     ),
     iconButtonSelectedData: IconButtonData(
       color: AppPalette.primary,
       style: ButtonStyle(
         backgroundColor: WidgetStatePropertyAll(AppPalette.surfaceVariant),
+        shape: WidgetStatePropertyAll(
+          RoundedRectangleBorder(
+            borderRadius: AppStyle.pillRadius,
+            side: BorderSide(color: AppPalette.hairline),
+          ),
+        ),
       ),
     ),
   );

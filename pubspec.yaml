@@ -1,7 +1,7 @@
 name: spwrite
 description: "Spwrite — a cross-platform writing app with a project/folder/document sidebar, WYSIWYG editor, and local SQLite persistence."
 publish_to: "none"
-version: 1.0.0+1
+version: 1.2.2+4
 
 environment:
   sdk: ">=3.4.0 <4.0.0"
@@ -11,8 +11,6 @@ dependencies:
   flutter:
     sdk: flutter
 
-  # SQLite persistence (mobile: iOS, Android, macOS via the plugin).
-  sqflite: 2.4.4
   # SQLite via FFI for desktop (macOS, Windows, Linux) and for running the
   # store tests on the dev machine using the in-memory factory.
   sqflite_common_ffi: 2.4.3
@@ -29,8 +27,7 @@ dependencies:
   flutter_quill: 11.6.0
   markdown_quill: 4.3.0
   markdown: 7.3.1
-  # Cross-platform file selection for character portraits (web, desktop,
-  # mobile). Flutter's first-party picker; opens the native file dialog and
+  # Cross-platform file selection for character portraits (web, desktop). Flutter's first-party picker; opens the native file dialog and
   # returns an XFile whose bytes are stored with the character in SQLite. Used
   # instead of image_picker because image_picker's gallery source is not
   # supported on macOS/desktop, whereas file_selector works on every platform.
@@ -38,9 +35,55 @@ dependencies:
   # ZIP archive writing, used to assemble the .docx (OpenXML) package for the
   # DOCX export. Pure Dart, works on web.
   archive: ^3.6.1
+  # Pure-Dart image decode / crop / resize / JPEG encode used to normalize a
+  # project's cover photo to exactly 1600 × 2560 px (lib/data/
+  # cover_image_normalizer.dart). Already a transitive dependency (via
+  # flutter_launcher_icons); pinned to the locked version, which is compatible
+  # with the archive 3.x line above. Runs on every platform including web.
+  image: 4.3.0
   # Browser APIs (Blob, URL, anchor) for the web-only .docx download path in
   # lib/presentation/export/save_bytes_web.dart.
   web: ^1.1.0
+  # HTTP client used for the one-time streaming download of the Local Model
+  # (GGUF Model Asset) in lib/data/ai/model_downloader.dart. Streaming the
+  # response body lets the download report byte-level progress and write to a
+  # temp file without buffering the whole ~1 GB asset in memory (Req 3.2).
+  http: 1.6.0
+  # SHA-256 hashing used to verify the downloaded Model Asset against the
+  # checksum in ModelCatalog before it is accepted, so a partial/corrupt file
+  # is never loaded as if complete (Req 3.5).
+  crypto: 3.0.7
+
+  # Embedded local-model runtime (the LlmEngine backend, design §2).
+  #
+  # Rationale — why an in-process llama.cpp binding, not Ollama:
+  #   * Offline / local-first: the app must be installable with Flutter alone,
+  #     with no separate companion app (e.g. Ollama) to install or run. fllama
+  #     wraps llama.cpp and runs the model *in this process* via native code /
+  #     FFI, so the assistant works fully offline after setup (Req 3, design §2).
+  #   * Flutter-only: it is a Flutter FFI plugin, so `flutter build` produces a
+  #     self-contained desktop app; the user installs nothing else (Req 8.5).
+  #   * One-time weights: only the GGUF Model Asset is downloaded, once, per
+  #     ModelCatalog — the runtime binary ships with the app (Req 3).
+  #   * Openly licensed: fllama is GPL-v2 (open source, dual-licensed); the
+  #     chosen GGUF model is openly licensed and documented per Req 7.2 / 7.4.
+  #     NOTE for maintainers: GPL-v2 is copyleft — Spwrite's own distribution
+  #     must remain GPL-compatible while this dependency is linked. See Req 7.
+  #
+  # Pinned to an exact commit (not a moving branch) for reproducible builds.
+  # This is the desktop-capable Telosnex binding (Flutter desktop via a native
+  # build hook + vendored llama.cpp), which is git-only (`publish_to: none`),
+  # hence a git dependency rather than a pub version. The concrete engine that
+  # uses it lives behind the LlmEngine abstraction (lib/data/ai/), so the
+  # runtime can be swapped without touching state/presentation (design §2).
+  fllama:
+    git:
+      url: https://github.com/Telosnex/fllama.git
+      ref: f624e4bfaf6c354d557ddc841ae4990760819c4a
+  # Native memory helpers (malloc/free) for the llama.cpp embedding FFI binding
+  # in lib/data/ai/llama_embedding_runtime.dart. Already a transitive
+  # dependency; pinned to the locked version.
+  ffi: 2.2.0
 
 dev_dependencies:
   flutter_test:
@@ -52,6 +95,10 @@ dev_dependencies:
   # Test primitives (test(), expect(), group()) imported directly by the
   # property/unit test files; declared explicitly since it is used directly.
   test: any
+  # Virtual clock used to drive the connectivity probe's periodic timer
+  # deterministically (task 4.2); imported directly so it is declared here
+  # rather than relied on transitively via flutter_test.
+  fake_async: 1.3.3
   # Recommended Flutter lint set referenced by analysis_options.yaml (pinned).
   flutter_lints: 6.0.0
   # Generates native launcher icons for every platform from the Spwrite logo.
@@ -62,12 +109,6 @@ dev_dependencies:
 # Spwrite logo.
 flutter_launcher_icons:
   image_path: "assets/images/spwrite_logo.png"
-  # Mobile
-  android: true
-  adaptive_icon_background: "#FFFFFF"
-  adaptive_icon_foreground: "assets/images/spwrite_logo.png"
-  ios: true
-  remove_alpha_ios: true
   # Desktop
   macos:
     generate: true

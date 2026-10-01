@@ -31,11 +31,30 @@ import 'package:provider/provider.dart';
 
 import 'package:sqflite_common_ffi/sqflite_ffi.dart' show Database;
 
+import 'data/ai/chunk_embedding_repository.dart';
+import 'data/ai/composite_context_retriever.dart';
+import 'data/ai/connectivity_probe.dart';
+import 'data/ai/fllama_embedding_model.dart';
+import 'data/ai/fllama_llm_engine.dart';
+import 'data/ai/index_state_store.dart';
+import 'data/ai/keyword_context_retriever.dart';
+import 'data/ai/model_downloader.dart';
+import 'data/ai/project_indexer.dart';
+import 'data/ai/retrieval_budget.dart';
+import 'data/ai/semantic_context_retriever.dart';
 import 'data/database_provider.dart';
+import 'data/observable_repositories.dart';
+import 'data/sqlite_ai_conversation_repository.dart';
+import 'data/sqlite_app_settings_repository.dart';
 import 'data/sqlite_character_repository.dart';
 import 'data/sqlite_document_repository.dart';
 import 'data/sqlite_folder_repository.dart';
 import 'data/sqlite_project_repository.dart';
+import 'domain/ai/ai_conversation_repository.dart';
+import 'domain/ai/connectivity_probe.dart';
+import 'domain/ai/embedding_model.dart';
+import 'domain/ai/model_catalog.dart';
+import 'domain/app_settings_repository.dart';
 import 'domain/character_repository.dart';
 import 'domain/document_repository.dart';
 import 'domain/folder_repository.dart';
@@ -45,11 +64,55 @@ import 'presentation/dashboard_view.dart';
 import 'presentation/editor_view.dart';
 import 'presentation/error_surfaces.dart';
 import 'presentation/project_sidebar_view.dart';
+import 'state/ai_assistant_state.dart';
 import 'state/app_navigation_state.dart';
 import 'state/character_panel_state.dart';
+import 'state/indexing_binding.dart';
+import 'state/indexing_state.dart';
 import 'state/load_status.dart';
 import 'state/project_workspace_state.dart';
 import 'theme/app_theme.dart';
+
+/// Builds the project-scoped AI collaborators for an open project
+/// (3.5 task 9.2; 3.6 task 16).
+///
+/// Both the AI Panel's [AiAssistantState] and the semantic index's
+/// [IndexingState] are scoped to the Active_Project (like
+/// [CharacterPanelState]): they are created when a project opens and disposed
+/// when it closes or another project opens (Req 9.4). The closures are built
+/// once in [main] over the app-lifetime collaborators (repositories, the
+/// [ModelDownloader], the [ConnectivityProbe], the shared [EmbeddingModel], the
+/// resolved model paths) and captured by [SpwriteApp], so [AppRoot] can build
+/// the per-project state without re-plumbing those dependencies.
+class AiProjectFactories {
+  /// Builds the project's [IndexingState] together with its [IndexingBinding]
+  /// (which observes repository save events and starts the background build).
+  final IndexingState Function(String projectId) createIndexingState;
+
+  /// Tears down what [createIndexingState] built: the binding first (so no
+  /// late event reaches a disposed notifier), then the [IndexingState].
+  final void Function(IndexingState indexing) disposeIndexingState;
+
+  /// Builds the project's [AiAssistantState] over a [CompositeContextRetriever]
+  /// whose semantic tier is gated by [indexing] (Req 7.1, 7.5).
+  final AiAssistantState Function(String projectId, IndexingState indexing)
+      createAssistantState;
+
+  const AiProjectFactories({
+    required this.createIndexingState,
+    required this.disposeIndexingState,
+    required this.createAssistantState,
+  });
+}
+
+/// Rough token budget assumed for the recent conversation history when sizing
+/// semantic grounding. [AiAssistantState] sends a bounded window of turns; a
+/// precise per-prompt figure is not available at wiring time (design open
+/// question 3 — chars/4 estimates are acceptable for v1).
+const int _estimatedHistoryTokens = 512;
+
+/// Rough token budget assumed for the system framing plus the user's message.
+const int _estimatedPromptFramingTokens = 256;
 
 /// Runs the v2 startup sequence and launches [SpwriteApp] (Req 17.4, 17.7,
 /// 5.1, 5.2).
@@ -69,8 +132,8 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // Select and configure the platform-appropriate SQLite factory before any
-  // database call (web uses the IndexedDB WASM factory; desktop uses FFI;
-  // mobile uses the default plugin factory) (Req 17.4).
+  // database call (web uses the IndexedDB WASM factory; desktop uses FFI)
+  // (Req 17.4).
   DatabaseProvider.initPlatformFactory();
 
   // Open (creating if absent) the v2 database and create the schema up front,
@@ -91,9 +154,167 @@ Future<void> main() async {
   // Wire the layers: the repositories over the one open database.
   final ProjectRepository projectRepository = SqliteProjectRepository(db);
   final FolderRepository folderRepository = SqliteFolderRepository(db);
-  final DocumentRepository documentRepository = SqliteDocumentRepository(db);
-  final CharacterRepository characterRepository =
-      SqliteCharacterRepository(db);
+  // App-wide key/value preferences (schema v8), e.g. the remembered export
+  // folder used by the Export dialog.
+  final AppSettingsRepository appSettingsRepository =
+      SqliteAppSettingsRepository(db);
+  // The document / character repositories are wrapped in change-observable
+  // decorators (3.6 task 16.3) so the per-project indexer can follow saves,
+  // adds, removes, and renames without the editor or character panel knowing
+  // the AI feature exists (Req 4.6). Everything else uses them exactly as the
+  // plain repositories.
+  final ObservableDocumentRepository observableDocuments =
+      ObservableDocumentRepository(SqliteDocumentRepository(db));
+  final ObservableCharacterRepository observableCharacters =
+      ObservableCharacterRepository(SqliteCharacterRepository(db));
+  final DocumentRepository documentRepository = observableDocuments;
+  final CharacterRepository characterRepository = observableCharacters;
+
+  // Construct the app-lifetime AI collaborators near the other repositories
+  // (design §10). The downloader (one-time Model Asset fetch + verify + cache)
+  // and the connectivity probe (a UI-only online/offline hint) are stateless
+  // across projects, so a single instance of each is shared for the life of the
+  // app rather than rebuilt per project.
+  final ModelDownloader modelDownloader = ModelDownloader();
+  final ConnectivityProbe connectivityProbe = NetworkConnectivityProbe();
+
+  // OPTIONAL cross-launch conversation persistence (Req 9.3): a project-scoped,
+  // SQLite-backed store over the same open database. Shared across projects
+  // (the repository is addressed by projectId), it is threaded into the
+  // per-project AiAssistantState factory below so a reopened project replays
+  // its prior conversation and persists new turns locally.
+  final AiConversationRepository aiConversationRepository =
+      SqliteAiConversationRepository(db);
+
+  // Resolve where the default Model Asset is (or will be) cached, once, at
+  // startup. `resolveCachedPath` never touches the network — it only derives a
+  // stable path under the app-support directory from the model id — and that
+  // path is the same for every project, so resolving it here keeps the
+  // per-project factory below synchronous and cheap. The engine loads the file
+  // lazily on first generate (Req 8.2), and its `load()` validates the file
+  // exists, so it is fine to hand it a path whose file has not been downloaded
+  // yet — the AI Panel drives the one-time download before generating.
+  final String cachedModelPath =
+      await modelDownloader.resolveCachedPath(ModelCatalog.defaultModel);
+
+  // 3.6 task 16.1 — the embedding model behind semantic retrieval. Its one-time
+  // download reuses the same shared ModelDownloader with the catalog's
+  // embedding entry (Req 3.1, 10.3); the path is resolved offline here exactly
+  // like the chat model's. One EmbeddingModel instance is shared by every
+  // project (it is stateless across projects and loads lazily on first embed),
+  // so switching projects never reloads it. It lives for the life of the app,
+  // like the downloader.
+  const ModelMetadata embeddingModelMetadata =
+      ModelCatalog.defaultEmbeddingModel;
+  final String cachedEmbeddingModelPath =
+      await modelDownloader.resolveCachedPath(embeddingModelMetadata);
+  final EmbeddingModel embeddingModel = FllamaEmbeddingModel(
+    modelPath: cachedEmbeddingModelPath,
+    // bge-small-en-v1.5 produces 384-dimensional vectors and needs no
+    // task-instruction prefixes (ModelCatalog.defaultEmbeddingModel docs).
+    dimension: 384,
+    modelId: embeddingModelMetadata.id,
+  );
+
+  // The project-scoped vector index and per-source resume markers (schema v6).
+  // Both are addressed by projectId, so one instance of each over the shared
+  // database serves every project (Req 4.7, 8.4, 9.3).
+  final ChunkEmbeddingRepository chunkEmbeddingRepository =
+      ChunkEmbeddingRepository(db);
+  final IndexStateStore indexStateStore = SqliteIndexStateStore(db);
+
+  // 3.6 task 16.3 — the per-project IndexingState + ProjectIndexer. The binding
+  // that observes repository change events is tracked alongside its state so
+  // it can be torn down with it when the project closes or switches.
+  final Expando<IndexingBinding> indexingBindings =
+      Expando<IndexingBinding>('indexingBinding');
+
+  IndexingState createIndexingState(String projectId) {
+    final ProjectIndexer indexer = ProjectIndexer(
+      embeddingModel: embeddingModel,
+      embeddings: chunkEmbeddingRepository,
+      documents: documentRepository,
+      characters: characterRepository,
+      indexState: indexStateStore,
+    );
+    final IndexingState indexing = IndexingState(
+      projectId,
+      indexer: indexer,
+      downloader: modelDownloader,
+      connectivityProbe: connectivityProbe,
+      model: embeddingModelMetadata,
+    );
+    final IndexingBinding binding = IndexingBinding(
+      indexing: indexing,
+      documentChanges: observableDocuments.changes,
+      characterChanges: observableCharacters.changes,
+    )..start();
+    indexingBindings[indexing] = binding;
+    return indexing;
+  }
+
+  void disposeIndexingState(IndexingState indexing) {
+    indexingBindings[indexing]?.dispose();
+    indexingBindings[indexing] = null;
+    indexing.dispose();
+  }
+
+  // The per-project AiAssistantState factory (3.6 task 16.2). The assistant
+  // still receives a single ContextRetriever (it is unchanged, Req 7.5): a
+  // CompositeContextRetriever that tries the project's SemanticContextRetriever
+  // first — gated by the project's IndexingState readiness — and falls back to
+  // the existing project-scoped KeywordContextRetriever, then chat-only
+  // (Req 7.1–7.4). The engine, retrievers, and budget are project-scoped and
+  // built here over the shared repositories / downloader / probe / embedding
+  // model. AppRoot calls this from a provider keyed by the open project's id,
+  // which owns the returned state's lifecycle (disposed on project change).
+  AiAssistantState createAssistantState(
+    String projectId,
+    IndexingState indexing,
+  ) {
+    final FllamaLlmEngine engine = FllamaLlmEngine(modelPath: cachedModelPath);
+    // Fit semantic grounding to the chat model's window, always reserving the
+    // engine's reply capacity (Req 5.1–5.4).
+    final RetrievalBudget budget = RetrievalBudget(
+      contextSize: engine.contextSize,
+      reservedReplyTokens: engine.defaultMaxTokens,
+      historyTokens: _estimatedHistoryTokens,
+      promptFramingTokens: _estimatedPromptFramingTokens,
+    );
+    final SemanticContextRetriever semantic = SemanticContextRetriever(
+      embeddingModel: embeddingModel,
+      embeddings: chunkEmbeddingRepository,
+      projectId: projectId,
+      topN: budget.topN,
+      // A stale-model index triggers a background rebuild (Req 7.4).
+      onStaleIndexDetected: indexing.onStaleIndexDetected,
+    );
+    final KeywordContextRetriever keyword = KeywordContextRetriever(
+      documentRepository: documentRepository,
+      characterRepository: characterRepository,
+      projectId: projectId,
+    );
+    final CompositeContextRetriever retriever = CompositeContextRetriever(
+      semantic: semantic,
+      keyword: keyword,
+      isSemanticReady: indexing.isSemanticReady,
+      budget: budget,
+    );
+    return AiAssistantState(
+      projectId,
+      engine: engine,
+      retriever: retriever,
+      downloader: modelDownloader,
+      connectivityProbe: connectivityProbe,
+      conversationRepository: aiConversationRepository,
+    );
+  }
+
+  final AiProjectFactories aiProjectFactories = AiProjectFactories(
+    createIndexingState: createIndexingState,
+    disposeIndexingState: disposeIndexingState,
+    createAssistantState: createAssistantState,
+  );
 
   // The workspace factory builds a ProjectWorkspaceState for a freshly opened
   // project over the folder / document repositories and kicks off its contents
@@ -118,6 +339,8 @@ Future<void> main() async {
   runApp(SpwriteApp(
     appState: appState,
     characterRepository: characterRepository,
+    aiProjectFactories: aiProjectFactories,
+    appSettingsRepository: appSettingsRepository,
   ));
 
   // Trigger the initial project-list load after startup (Req 1.1, 17.5).
@@ -142,10 +365,23 @@ class SpwriteApp extends StatelessWidget {
   /// per-project [CharacterPanelState] can be built when a project is open.
   final CharacterRepository characterRepository;
 
+  /// Builds (and tears down) the project-scoped [IndexingState] and
+  /// [AiAssistantState] for an open project. Provided to the tree so [AppRoot]
+  /// can construct the per-project AI state alongside the
+  /// [CharacterPanelState] when a project is open (Req 9.4). It closes over the
+  /// app-lifetime AI collaborators constructed in [main].
+  final AiProjectFactories aiProjectFactories;
+
+  /// App-wide preferences (e.g. the remembered export folder), provided to the
+  /// tree so the Export dialog can read and persist them.
+  final AppSettingsRepository appSettingsRepository;
+
   const SpwriteApp({
     super.key,
     required this.appState,
     required this.characterRepository,
+    required this.aiProjectFactories,
+    required this.appSettingsRepository,
   });
 
   @override
@@ -154,6 +390,8 @@ class SpwriteApp extends StatelessWidget {
       providers: [
         ChangeNotifierProvider<AppNavigationState>.value(value: appState),
         Provider<CharacterRepository>.value(value: characterRepository),
+        Provider<AiProjectFactories>.value(value: aiProjectFactories),
+        Provider<AppSettingsRepository>.value(value: appSettingsRepository),
       ],
       child: MaterialApp(
         title: 'Spwrite',
@@ -162,7 +400,8 @@ class SpwriteApp extends StatelessWidget {
         // Material/Widgets/Cupertino delegates it bundles) to be registered on
         // the app; without them the Quill editor and toolbar throw
         // MissingFlutterQuillLocalizationException at build time.
-        localizationsDelegates: FlutterQuillLocalizations.localizationsDelegates,
+        localizationsDelegates:
+            FlutterQuillLocalizations.localizationsDelegates,
         supportedLocales: FlutterQuillLocalizations.supportedLocales,
         // Apply the dark theme unconditionally at the root (Req 18.1, 18.4).
         theme: AppTheme.dark,
@@ -201,15 +440,19 @@ class AppRoot extends StatelessWidget {
       return const DashboardView();
     }
 
-    // A project is open: provide its workspace and a project-scoped
-    // CharacterPanelState to the subtree, then show the shell. The value keys
-    // tie both providers to the open project's id so opening a different
-    // project (or reopening) rebuilds them against the fresh project rather
-    // than reusing stale state. The CharacterPanelState is created here (and
-    // disposed by the provider when the project changes) and kicks off its
-    // initial load.
+    // A project is open: provide its workspace, a project-scoped
+    // CharacterPanelState, and a project-scoped AiAssistantState to the
+    // subtree, then show the shell. The value key ties the providers to the
+    // open project's id so opening a different project (or reopening) rebuilds
+    // them against the fresh project rather than reusing stale state. The
+    // CharacterPanelState is created here (and disposed by the provider when
+    // the project changes) and kicks off its initial load.
     final CharacterRepository characterRepository =
         context.read<CharacterRepository>();
+    // The per-project AI factories built in main(), closing over the
+    // app-lifetime AI collaborators. Building the state here (rather than in
+    // main) keeps the AI collaborators plumbing out of the state layer.
+    final AiProjectFactories ai = context.read<AiProjectFactories>();
     return MultiProvider(
       key: ValueKey<String>(activeProject.id),
       providers: [
@@ -218,6 +461,32 @@ class AppRoot extends StatelessWidget {
           create: (_) =>
               CharacterPanelState(activeProject.id, characterRepository)
                 ..load(),
+        ),
+        // Project-scoped AI Panel state (Req 9.4). Keyed to the open project's
+        // id via the MultiProvider key, so it is disposed when the project
+        // changes or closes (Req 9.2). The model is NOT loaded eagerly here —
+        // construction stays cheap and the engine loads lazily on first use
+        // (Req 8.2); the AiPanelView drives ensureModelReady on open.
+        //
+        // Project-scoped semantic-index state (3.6 task 16.3), observed by the
+        // AI Panel's status strip via `context.watch<IndexingState?>()`.
+        // Created eagerly (lazy: false) so the embedding-model probe and the
+        // background build start when the project opens, not when the panel is
+        // first shown (Req 9.2). The custom dispose tears down the repository
+        // binding before the state itself, so a project switch leaves no
+        // listener behind.
+        ListenableProvider<IndexingState>(
+          lazy: false,
+          create: (_) => ai.createIndexingState(activeProject.id),
+          dispose: (_, IndexingState indexing) =>
+              ai.disposeIndexingState(indexing),
+        ),
+        // Reads the IndexingState above to gate the semantic retrieval tier.
+        ChangeNotifierProvider<AiAssistantState>(
+          create: (BuildContext context) => ai.createAssistantState(
+            activeProject.id,
+            context.read<IndexingState>(),
+          ),
         ),
       ],
       child: const WorkspaceShell(),
@@ -372,7 +641,7 @@ class _WorkspaceShellState extends State<WorkspaceShell> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
           SizedBox(width: _sidebarWidth, child: ProjectSidebarView()),
-          VerticalDivider(width: 1, thickness: 1),
+          VerticalDivider(width: 1, thickness: 1, color: AppPalette.hairline),
           Expanded(child: EditorView()),
         ],
       ),

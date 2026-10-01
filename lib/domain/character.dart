@@ -4,8 +4,8 @@
 /// A character belongs to exactly one project ([Character.projectId]) — the
 /// author's cast of fictional people for that book/project. Each character has
 /// a name, an optional role/title, a free-form details/notes body, an optional
-/// portrait image (stored as raw bytes so it is fully portable across web,
-/// desktop, and mobile), and creation / last-modified timestamps.
+/// portrait image (stored as raw bytes so it is fully portable across web
+/// and desktop), and creation / last-modified timestamps.
 ///
 /// Timestamps are persisted as integer milliseconds since the Unix epoch in UTC
 /// for stable, timezone-independent ordering and round-tripping, matching the

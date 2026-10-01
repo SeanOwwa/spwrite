@@ -4,9 +4,6 @@ PODS:
   - FlutterMacOS (1.0.0)
   - quill_native_bridge_macos (0.0.1):
     - FlutterMacOS
-  - sqflite_darwin (0.0.4):
-    - Flutter
-    - FlutterMacOS
   - "sqlite3 (3.46.1+1)":
     - "sqlite3/common (= 3.46.1+1)"
   - "sqlite3/common (3.46.1+1)"
@@ -32,7 +29,6 @@ DEPENDENCIES:
   - file_selector_macos (from `Flutter/ephemeral/.symlinks/plugins/file_selector_macos/macos`)
   - FlutterMacOS (from `Flutter/ephemeral`)
   - quill_native_bridge_macos (from `Flutter/ephemeral/.symlinks/plugins/quill_native_bridge_macos/macos`)
-  - sqflite_darwin (from `Flutter/ephemeral/.symlinks/plugins/sqflite_darwin/darwin`)
   - sqlite3_flutter_libs (from `Flutter/ephemeral/.symlinks/plugins/sqlite3_flutter_libs/macos`)
   - url_launcher_macos (from `Flutter/ephemeral/.symlinks/plugins/url_launcher_macos/macos`)
 
@@ -47,8 +43,6 @@ EXTERNAL SOURCES:
     :path: Flutter/ephemeral
   quill_native_bridge_macos:
     :path: Flutter/ephemeral/.symlinks/plugins/quill_native_bridge_macos/macos
-  sqflite_darwin:
-    :path: Flutter/ephemeral/.symlinks/plugins/sqflite_darwin/darwin
   sqlite3_flutter_libs:
     :path: Flutter/ephemeral/.symlinks/plugins/sqlite3_flutter_libs/macos
   url_launcher_macos:
@@ -58,7 +52,6 @@ SPEC CHECKSUMS:
   file_selector_macos: 9e9e068e90ebee155097d00e89ae91edb2374db7
   FlutterMacOS: c232990155153907050900a2e175c7773903ba4e
   quill_native_bridge_macos: 2b005cb56902bb740e0cd9620aa399dfac6b4882
-  sqflite_darwin: 20b2a3a3b70e43edae938624ce550a3cbf66a3d0
   sqlite3: 0bb0e6389d824e40296f531b858a2a0b71c0d2fb
   sqlite3_flutter_libs: 03311aede9d32fb2d24e32bebb8cd01c3b2e6239
   url_launcher_macos: f87a979182d112f911de6820aefddaf56ee9fbfd

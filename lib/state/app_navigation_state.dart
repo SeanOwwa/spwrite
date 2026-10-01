@@ -166,7 +166,10 @@ class AppNavigationState extends ChangeNotifier {
   ///
   /// On a repository failure the existing list is retained unchanged and a
   /// [transientError] is surfaced (Req 2.6).
-  Future<void> createProject(String name) async {
+  ///
+  /// [coverImage] is an optional, already-normalized cover photo (see
+  /// `normalizeCoverImage`) persisted with the new project.
+  Future<void> createProject(String name, {Uint8List? coverImage}) async {
     final String trimmed = name.trim();
 
     // Req 2.3: empty / whitespace-only name — reject.
@@ -188,6 +191,7 @@ class AppNavigationState extends ChangeNotifier {
       id: _uuid.v4(),
       name: trimmed,
       now: DateTime.now().toUtc(),
+      coverImage: coverImage,
     );
 
     try {
@@ -229,7 +233,57 @@ class AppNavigationState extends ChangeNotifier {
   /// [transientError] indicating the save failed is surfaced (Req 3.7).
   ///
   /// Unknown [id]s (no matching in-memory project) are ignored.
-  Future<void> renameProject(String id, String name) async {
+  Future<void> renameProject(String id, String name) {
+    // A rename keeps the existing cover photo untouched.
+    return _saveProjectEdit(
+      id,
+      name,
+      (Project current, String trimmed, DateTime now) =>
+          current.copyWith(name: trimmed, modifiedAt: now),
+      failureMessage: 'Rename could not be saved.',
+    );
+  }
+
+  /// Updates the project identified by [id] from the create/edit dialog: its
+  /// [name] (validated exactly like [renameProject]) and, optionally, its cover
+  /// photo.
+  ///
+  /// - [coverImage] non-null replaces the cover with the given (already
+  ///   normalized) bytes.
+  /// - [clearCoverImage] removes the cover.
+  /// - Neither leaves the cover unchanged.
+  ///
+  /// The last-modified timestamp advances, the change is persisted via
+  /// [ProjectRepository.update], ordering is re-applied, and the Active_Project
+  /// reference is refreshed when it is the edited project. On a repository
+  /// failure the in-memory state is retained and a [transientError] surfaces.
+  Future<void> updateProject(
+    String id, {
+    required String name,
+    Uint8List? coverImage,
+    bool clearCoverImage = false,
+  }) {
+    return _saveProjectEdit(
+      id,
+      name,
+      (Project current, String trimmed, DateTime now) => current.copyWith(
+        name: trimmed,
+        modifiedAt: now,
+        coverImage: coverImage,
+        clearCoverImage: clearCoverImage,
+      ),
+      failureMessage: 'Project changes could not be saved.',
+    );
+  }
+
+  /// Shared validate → build → persist → re-sort flow behind [renameProject]
+  /// and [updateProject].
+  Future<void> _saveProjectEdit(
+    String id,
+    String name,
+    Project Function(Project current, String trimmedName, DateTime now) apply, {
+    required String failureMessage,
+  }) async {
     final String trimmed = name.trim();
 
     // Req 3.3: empty / whitespace-only name — retain name and timestamp.
@@ -251,10 +305,7 @@ class AppNavigationState extends ChangeNotifier {
 
     final Project current = _projects[index];
     // Req 3.2: accept the trimmed name and advance the last-modified stamp.
-    final Project renamed = current.copyWith(
-      name: trimmed,
-      modifiedAt: DateTime.now().toUtc(),
-    );
+    final Project renamed = apply(current, trimmed, DateTime.now().toUtc());
 
     try {
       await _repository.update(renamed);
@@ -271,7 +322,7 @@ class AppNavigationState extends ChangeNotifier {
     } catch (_) {
       // Req 3.7: retain the in-memory state unchanged; surface a recoverable
       // error.
-      _transientError = 'Rename could not be saved.';
+      _transientError = failureMessage;
     } finally {
       notifyListeners();
     }

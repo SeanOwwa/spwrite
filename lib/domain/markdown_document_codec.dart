@@ -48,12 +48,103 @@ class MarkdownDocumentCodec {
   /// the prospective source length before applying an edit (Req 15.3, 15.4).
   /// Restricted to the supported feature set (bold, italic, headings,
   /// ordered/unordered lists, links) — the only constructs the toolbar emits.
-  String deltaToMarkdown(Delta delta) => _deltaToMarkdown.convert(delta);
+  String deltaToMarkdown(Delta delta) =>
+      _deltaToMarkdown.convert(_protectWhitespace(delta));
 
   /// Converts a Markdown source string back into a Quill [Delta].
   ///
   /// Used on load to render stored Markdown into the editor (Req 15.2).
   /// Restricted to the supported feature set (bold, italic, headings,
   /// ordered/unordered lists, links).
-  Delta markdownToDelta(String markdown) => _markdownToDelta.convert(markdown);
+  Delta markdownToDelta(String markdown) =>
+      _restoreWhitespace(_markdownToDelta.convert(markdown));
+
+  /// Placeholder for whitespace Markdown would otherwise discard. A no-break
+  /// space is not "blank" to a Markdown parser, so a line holding one survives
+  /// as its own paragraph, and leading ones do not trigger an indented code
+  /// block.
+  static const String _nbsp = '\u00A0';
+
+  /// Before saving: empty plain lines (pressing Enter twice) become a line
+  /// holding [_nbsp], and leading spaces on plain lines (the editor's Tab
+  /// indent) become [_nbsp]s. Markdown would otherwise collapse blank lines and
+  /// read a 4+ space indent as a code block, so the writer's spacing vanished
+  /// after a save and reload.
+  static Delta _protectWhitespace(Delta delta) {
+    final Delta out = Delta();
+    bool atLineStart = true;
+    for (final Operation op in delta.toList()) {
+      final Object? data = op.data;
+      if (data is! String) {
+        out.push(op);
+        atLineStart = false;
+        continue;
+      }
+      final Map<String, dynamic>? attrs = op.attributes;
+      int i = 0;
+      while (i < data.length) {
+        final int nl = data.indexOf('\n', i);
+        final String segment =
+            nl < 0 ? data.substring(i) : data.substring(i, nl);
+        if (segment.isNotEmpty) {
+          String text = segment;
+          if (atLineStart) {
+            final int lead = text.length - text.trimLeft().length;
+            final String leading = text.substring(0, lead);
+            if (lead > 0 && leading.replaceAll(' ', '').isEmpty) {
+              text = _nbsp * lead + text.substring(lead);
+            }
+          }
+          out.insert(text, attrs);
+          atLineStart = false;
+        }
+        if (nl < 0) break;
+        // A newline closes the line; its attributes are the block style.
+        final Map<String, dynamic>? lineAttrs = attrs;
+        if (atLineStart && (lineAttrs == null || lineAttrs.isEmpty)) {
+          out.insert(_nbsp);
+        }
+        out.insert('\n', lineAttrs);
+        atLineStart = true;
+        i = nl + 1;
+      }
+    }
+    return out;
+  }
+
+  /// After loading: undoes [_protectWhitespace]. A line that is only [_nbsp]
+  /// becomes an empty line, and leading [_nbsp]s become regular spaces.
+  static Delta _restoreWhitespace(Delta delta) {
+    final Delta out = Delta();
+    bool atLineStart = true;
+    for (final Operation op in delta.toList()) {
+      final Object? data = op.data;
+      if (data is! String) {
+        out.push(op);
+        atLineStart = false;
+        continue;
+      }
+      final Map<String, dynamic>? attrs = op.attributes;
+      final StringBuffer buf = StringBuffer();
+      for (int k = 0; k < data.length; k++) {
+        final String ch = data[k];
+        if (ch == '\n') {
+          buf.write(ch);
+          atLineStart = true;
+        } else if (atLineStart && ch == _nbsp) {
+          // Drop a lone placeholder (empty line); otherwise restore a space.
+          final bool lineIsOnlyNbsp =
+              (k + 1 >= data.length || data[k + 1] == '\n') &&
+                  (k == 0 || data[k - 1] == '\n');
+          if (!lineIsOnlyNbsp) buf.write(' ');
+        } else {
+          buf.write(ch);
+          atLineStart = false;
+        }
+      }
+      final String text = buf.toString();
+      if (text.isNotEmpty) out.insert(text, attrs);
+    }
+    return out;
+  }
 }

@@ -1,4 +1,4 @@
-/// Native (mobile + desktop) database-path resolution. This library imports
+/// Native (desktop) database-path resolution. This library imports
 /// `dart:io` and is selected on every non-web platform via the conditional
 /// import in `database_provider.dart`.
 library;
@@ -15,8 +15,8 @@ bool get isDesktop =>
 
 /// Resolves the on-disk path for the database [fileName].
 ///
-/// On desktop, uses `path_provider`'s application-support directory. On mobile,
-/// uses sqflite's [getDatabasesPath]. Both are per-platform writable locations.
+/// On desktop, uses `path_provider`'s application-support directory. Any other
+/// native platform falls back to sqflite's [getDatabasesPath].
 Future<String> resolveDbPath(String fileName) async {
   if (isDesktop) {
     final Directory dir = await getApplicationSupportDirectory();

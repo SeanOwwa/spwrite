@@ -72,7 +72,7 @@ class SqliteProjectRepository implements ProjectRepository {
   }
 
   /// Inserts [project] as a new row (Req 2.2) and returns the persisted entity.
-  /// The row values (id, name, timestamps) are bound as parameters via
+  /// The row values (id, name, timestamps, cover BLOB) are bound as parameters via
   /// [Project.toRow].
   @override
   Future<Project> create(Project project) async {
@@ -84,9 +84,9 @@ class SqliteProjectRepository implements ProjectRepository {
     return project;
   }
 
-  /// Persists name / last-modified changes for the existing project identified
-  /// by `project.id` (Req 3.2). All values, including the id in the `WHERE`
-  /// clause, are bound as parameters.
+  /// Persists name / cover-photo / last-modified changes for the existing
+  /// project identified by `project.id` (Req 3.2). All values, including the
+  /// cover BLOB and the id in the `WHERE` clause, are bound as parameters.
   @override
   Future<void> update(Project project) async {
     await _db.update(

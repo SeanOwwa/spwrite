@@ -49,6 +49,7 @@ import 'document_list_item.dart';
 import 'error_surfaces.dart';
 import 'folder_tile.dart';
 import 'name_field.dart';
+import 'project_cover.dart';
 
 /// The Project_Sidebar: a header (project name + back / create-folder /
 /// create-root-document controls), an optional contents-load-error banner, and
@@ -178,11 +179,7 @@ class _ProjectSidebarViewState extends State<ProjectSidebarView> {
 
     return Container(
       decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: <Color>[AppPalette.surface, Color(0xFF0D1526)],
-        ),
+        gradient: AppStyle.panelSurface,
         border: Border(
           right: BorderSide(color: AppPalette.hairline),
         ),
@@ -213,8 +210,14 @@ class _ProjectSidebarViewState extends State<ProjectSidebarView> {
   /// Project Name, and the create-folder (Req 7.1) and create-root-document
   /// (Req 10.1) controls.
   Widget _buildHeader(BuildContext context, ProjectWorkspaceState state) {
+    final TextTheme text = Theme.of(context).textTheme;
     return Container(
-      padding: const EdgeInsets.fromLTRB(8, 12, 8, 12),
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.md,
+        AppSpacing.md,
+        AppSpacing.md,
+        AppSpacing.md,
+      ),
       decoration: const BoxDecoration(
         border: Border(bottom: BorderSide(color: AppPalette.hairline)),
       ),
@@ -241,33 +244,56 @@ class _ProjectSidebarViewState extends State<ProjectSidebarView> {
                 onPressed: () =>
                     context.read<AppNavigationState>().closeProject(),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: AppSpacing.md),
+              // The project's cover thumbnail (or initial badge), 1:1.6.
+              SizedBox(
+                width: 34,
+                height: 34 / AppStyle.coverAspectRatio,
+                child: ProjectCover(
+                  coverImage: state.project.coverImage,
+                  projectName: state.project.name,
+                  borderRadius: const BorderRadius.all(Radius.circular(6)),
+                  initialFontSize: 20,
+                ),
+              ),
+              const SizedBox(width: AppSpacing.md),
               Expanded(
-                child: Text(
-                  state.project.name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: AppPalette.textPrimary,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: -0.2,
-                  ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    Text(
+                      'PROJECT',
+                      style: text.labelSmall,
+                    ),
+                    const SizedBox(height: AppSpacing.xxs),
+                    Semantics(
+                      header: true,
+                      child: Text(
+                        state.project.name,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: text.titleLarge,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: AppSpacing.md),
           Row(
             children: <Widget>[
               // Req 7.1: create a folder in the Active_Project.
               Expanded(
                 child: OutlinedButton.icon(
+                  key: const ValueKey<String>('sidebar-new-folder'),
                   onPressed: () => _promptCreateFolder(context, state),
                   icon: const Icon(Icons.create_new_folder_outlined, size: 18),
                   label: const Text('Folder'),
                   style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    padding:
+                        const EdgeInsets.symmetric(vertical: AppSpacing.md),
                   ),
                 ),
               ),
@@ -279,7 +305,8 @@ class _ProjectSidebarViewState extends State<ProjectSidebarView> {
                   icon: const Icon(Icons.note_add_outlined, size: 18),
                   label: const Text('Doc'),
                   style: FilledButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    padding:
+                        const EdgeInsets.symmetric(vertical: AppSpacing.md),
                   ),
                 ),
               ),
@@ -320,12 +347,23 @@ class _ProjectSidebarViewState extends State<ProjectSidebarView> {
   Widget _buildEmptyState() {
     return const Center(
       child: Padding(
-        padding: EdgeInsets.symmetric(horizontal: 24),
-        child: Text(
-          'This project has no folders or documents yet. '
-          'Create a folder or a document to get started.',
-          textAlign: TextAlign.center,
-          style: TextStyle(color: AppPalette.textSecondary),
+        padding: EdgeInsets.symmetric(horizontal: AppSpacing.xl),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            Icon(
+              Icons.auto_stories_outlined,
+              size: 40,
+              color: AppPalette.textSecondary,
+            ),
+            SizedBox(height: AppSpacing.md),
+            Text(
+              'This project has no folders or documents yet. '
+              'Create a folder or a document to get started.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: AppPalette.textSecondary, height: 1.4),
+            ),
+          ],
         ),
       ),
     );
@@ -350,6 +388,7 @@ class _ProjectSidebarViewState extends State<ProjectSidebarView> {
     final List<RootItem> items = state.rootItems();
     return ReorderableListView.builder(
       buildDefaultDragHandles: false,
+      padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
       itemCount: items.length,
       onReorderItem: (int oldIndex, int newIndex) =>
           state.reorderRootItems(oldIndex, newIndex),
@@ -508,13 +547,14 @@ class _ProjectSidebarViewState extends State<ProjectSidebarView> {
       dragAnchorStrategy: childDragAnchorStrategy,
       // A small delay-free drag on the body; taps still pass through to select.
       feedback: Material(
-        color: Colors.transparent,
+        color: AppPalette.transparent,
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           decoration: BoxDecoration(
             color: AppPalette.surfaceVariant,
-            borderRadius: BorderRadius.circular(6),
+            borderRadius: AppStyle.pillRadius,
             border: Border.all(color: AppPalette.primary),
+            boxShadow: AppStyle.hoverShadow,
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,

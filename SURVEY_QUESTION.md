@@ -1,145 +1,152 @@
-# Spwrite — User Survey
+# Spwrite — Writer Survey
 
-A short survey to help us understand how people write and what they'd want from
-Spwrite, a calm, distraction-free writing app that organizes work into
-projects, folders, and documents (which you can drag to reorder and move around),
-with a manuscript-style editor, Word (.docx) export, a character panel, and
-offline, on-device saving.
+A short survey for writers who haven't tried Spwrite yet. Spwrite is a calm,
+distraction-free writing app for macOS, Windows, Linux, and the web browser. It
+keeps your work organized into projects (each with its own book-cover photo),
+folders, and documents, gives you a clean manuscript-style editor, exports to
+Word (.docx), keeps a character panel for your cast, includes an offline
+on-device AI writing helper with semantic search that finds passages by meaning
+across your whole project, and saves everything privately on your own device —
+no account, works offline. These questions help us build what writers actually
+want (and give you a peek at what's inside).
 
-> **How to use this file:** Each question below lists a suggested Google Forms
-> question type and answer options. Copy them into a new Google Form
-> (question by question, or use the "import questions" flow).
+> **How to use this file:** Each question lists a suggested Google Forms
+> question type and answer options. Copy them into a new Google Form (question
+> by question, or use the "import questions" flow).
 
 ---
 
-## Section 1 — About your writing (no app knowledge needed)
+## Section 1 — You, the writer
 
-*These questions are about how you write today — you don't need to know
-anything about Spwrite to answer them.*
+*A little about how you write today.*
 
-**Q1. What kind of writing do you do most often?**
+**Q1. What do you love to write?**
 *Question type: Multiple choice*
 - Novels / fiction
+- Short stories
 - Non-fiction / articles / blogging
-- Academic / research
+- Poetry
 - Screenwriting / scripts
 - Journaling / personal notes
 - Other (short answer)
 
-**Q2. What do you mainly use to write today?**
+**Q2. When you're in the zone, what pulls you out of it the most?**
 *Question type: Multiple choice*
-- Microsoft Word
-- Google Docs
-- Notion
-- Apple Notes / plain notes app
-- Pen and paper
+- A cluttered, busy screen
+- Fear of losing my work
+- Losing track of my files and drafts
+- Formatting fighting me instead of helping
+- Distractions from the internet / other apps
 - Other (short answer)
 
-**Q3. How do you keep your writing projects organized right now?**
-*Question type: Multiple choice*
-- Folders on my computer
-- Separate files with no real system
-- One big document for everything
-- A dedicated app's built-in organization
-- I struggle to stay organized
-- Other (short answer)
-
-**Q4. When you sit down to write, how often do on-screen clutter or
-distractions get in your way?**
+**Q3. Picture a calm, dark, distraction-free page — serif text, double-spaced,
+like a real manuscript. How much would that help you focus?**
 *Question type: Linear scale (1–5)*
-- 1 = Never — my setup is calm and focused
-- 5 = Very often — there's always something pulling my attention
+- 1 = Wouldn't matter to me
+- 5 = I'd write so much more happily
 
-**Q5. What frustrates you most about your current writing tool?**
-*Question type: Paragraph (long answer)*
+**Q4. Spwrite keeps every book, article, or client in its own project, with
+folders and documents you can drag to reorder in seconds. How valuable is that
+kind of organization to you?**
+*Question type: Linear scale (1–5)*
+- 1 = I don't need it
+- 5 = This is exactly what I've been missing
+
+**Q5. Your writing saves itself as you type and lives only on your own
+computer — no account, no cloud, works fully offline. How does that sit with
+you?**
+*Question type: Multiple choice*
+- I love it — private and always safe
+- Nice, but I'd also want optional cloud backup
+- I'd prefer everything in the cloud
+- No strong feeling
 
 ---
 
-## Section 2 — Features you'd want
+## Section 2 — What would make you excited to write in Spwrite
 
-**Q6. Which new feature would be most valuable to you?**
+*These features exist today or are on the way. Tell us what pulls you in.*
+
+**Q6. Which of these makes you most want to try Spwrite?**
 *Question type: Multiple choice*
-- Cloud sync across my devices
-- Export to Word / PDF / Markdown
-- Writing goals & progress tracking (daily word targets)
-- Full-text search across all my documents
-- Collaboration / sharing with others
+- A calm, manuscript-style editor built for focus
+- Everything saved privately on my device, offline
+- Drag-and-drop projects, folders, and documents
+- One-click export to Microsoft Word (.docx)
+- A character panel to keep my cast and their details close
+- A book-cover photo for each project
+- An offline AI helper that finds passages by meaning across my whole project
 - Other (short answer)
 
-**Q7. How useful would cloud backup / sync across devices be to you?**
+**Q7. Spwrite has a Character Panel — portraits, roles, and notes for your cast,
+right beside your writing. How useful would that be for your stories?**
 *Question type: Linear scale (1–5)*
-- 1 = Not useful — on-device only is fine
-- 5 = Essential — I switch between devices
+- 1 = I wouldn't use it
+- 5 = I'd use it constantly
 
-**Q8. Which export or sharing options do you need? (Spwrite already exports to
-Word / .docx — which others matter to you?)**
+**Q8. Every Spwrite project can have its own book-cover photo, shown on your
+project shelf like a real book. How much would you use covers for your
+projects?**
+*Question type: Linear scale (1–5)*
+- 1 = I'd never add one
+- 5 = Every project gets a cover
+
+**Q9. When your draft is done, which of these would you want to send it to?**
 *Question type: Checkboxes (select all that apply)*
-- Export to Microsoft Word (.docx) — already available
-- Export to PDF
-- Export to Markdown / plain text
-- Share a read-only link
+- Microsoft Word (.docx)
+- PDF
+- Markdown / plain text
+- A shareable read-only link
 - Print
-- None of these
+- None — I'd keep it in Spwrite
 
-**Q9. What tools would help you stay organized or motivated while writing?**
-*Question type: Checkboxes (select all that apply)*
-- Daily word-count goals & streaks
-- Tags or labels on documents
-- Outline / chapter view
-- Notes or research pane alongside the editor
-- Reminders to write
+**Q10. Spwrite now ships an on-device AI writing helper that runs offline and can
+search your own notes and story — no cloud, no account, your words never leave
+your computer. How excited are you for that?**
+*Question type: Linear scale (1–5)*
+- 1 = Not interested
+- 5 = Take my draft, I want this now
+
+**Q11. The AI Panel doesn't just chat — it reads your own project material (your
+documents and your characters) to answer questions grounded in *your* story.
+Its semantic search finds passages by meaning across your whole project, even
+if you word the question differently from how you wrote it. Hit **New chat**
+any time to start fresh. It's free, on-device, and private: a one-time model
+download the first time (about 0.9 GB), plus a second small download (about
+37 MB) for semantic search, then it works fully offline. Web research and image
+generation are coming soon (VIP). Which part appeals to you most?**
+*Question type: Multiple choice*
+- It answers using my own documents and characters, not the open internet
+- It finds passages by meaning across my whole project
+- It's fully offline and private after a one-time download
+- It's free and runs on my own device — no subscription
+- Web research (Coming soon — VIP)
+- Image generation (Coming soon — VIP)
 - Other (short answer)
 
-**Q10. Describe one feature you wish your ideal writing app had. What problem
-would it solve for you?**
+> *A quick note on the model:* Spwrite's assistant is powered by the openly
+> licensed **Qwen2.5-1.5B-Instruct** model, released under the **Apache-2.0**
+> license
+> ([license text](https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct/blob/main/LICENSE)).
+> Semantic search uses the openly licensed **bge-small-en-v1.5** embedding
+> model (also **Apache-2.0**). Both models are downloaded once from a public
+> source and then run entirely on your device.
+
+**Q12. What's the one thing a writing app could do that would make you switch to
+it for good?**
 *Question type: Paragraph (long answer)*
 
 ---
 
-## Section 3 — Spwrite features (for people who have tried it)
+## Closing page — Thanks! Try Spwrite & join the community
 
-*These questions are about features that are already in Spwrite. Skip this
-section if you haven't used the app yet.*
+*In Google Forms, make this the last section (Add section) with no questions —
+just description text — so it shows after the respondent finishes. You can also
+paste these links into the form's "Confirmation message" (Settings →
+Presentation) so they appear on the submitted screen.*
 
-**Q11. How easy was it to organize your work by dragging folders and documents
-into the order you wanted?**
-*Question type: Linear scale (1–5)*
-- 1 = Confusing
-- 5 = Very easy
-
-**Q12. Being able to place a document above, below, or between folders (and drag
-it into or out of a folder) is…**
-*Question type: Multiple choice*
-- Exactly how I want to organize
-- Nice, but I rarely need it
-- Confusing — I preferred a simpler list
-- I didn't notice this was possible
-
-**Q13. Rename and delete buttons stay hidden until you long-press a folder or
-document. How does that feel?**
-*Question type: Multiple choice*
-- Cleaner — I like the tidy sidebar
-- Fine once I learned it
-- Hard to discover — I couldn't find the controls at first
-- I'd rather the buttons were always visible
-
-**Q14. Have you used "Export to Word (.docx)", and did the result match what you
-expected (title as heading, one document per page)?**
-*Question type: Multiple choice*
-- Yes, it worked as expected
-- Yes, but the formatting wasn't quite right
-- I tried it but hit a problem
-- I haven't used export yet
-
-**Q15. What would make organizing and exporting your writing in Spwrite better?**
-*Question type: Paragraph (long answer)*
-
-**Q16. Spwrite shows a small status pill in the top-left of the editor toolbar
-that reads "Saving…" as you type and "Saved" once your text is stored. How does
-this affect your confidence that your work is safe?**
-*Question type: Multiple choice*
-- Reassuring — I can see my work is saved and never worry about it
-- Helpful, but I'd only glance at it occasionally
-- I didn't notice the indicator
-- I'd prefer a manual Save button as well
-- The indicator was unclear or distracting
+> **Thanks — now go write something.**
+>
+> **Download / try Spwrite:** https://seanowwa.github.io/spwrite.web
+>
+> **Join the Spwrite Online Server (Discord):** https://discord.gg/KCWfmqGCNy

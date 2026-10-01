@@ -52,6 +52,7 @@ import 'package:provider/provider.dart';
 import '../domain/document.dart';
 import '../state/project_workspace_state.dart';
 import '../theme/app_theme.dart';
+import 'ai_panel_view.dart';
 import 'character_panel_view.dart';
 import 'editor_toolbar.dart';
 import 'export/export_dialog.dart';
@@ -100,6 +101,12 @@ class _EditorViewState extends State<EditorView> {
 
   /// Whether the right-hand Character Panel is currently open.
   bool _characterPanelOpen = false;
+
+  /// Whether the right-hand AI Panel is currently open. Backs the AI toolbar
+  /// toggle's open/closed tint (Req 1.4). The full open/close + panel-hosting
+  /// behaviour (and the mutual exclusivity with the Character Panel) is wired
+  /// in a subsequent task; here it only drives the icon tint.
+  bool _aiPanelOpen = false;
 
   /// Guards against re-entrant [onContentChanged] dispatches while we are
   /// programmatically replacing the controller's document (load path), and
@@ -233,23 +240,40 @@ class _EditorViewState extends State<EditorView> {
       children: <Widget>[
         _buildTitleBar(context, active),
         _buildToolbarRow(context),
-        const Divider(height: 1, thickness: 1, color: AppPalette.outline),
         if (atMaxLength) _buildMaxLengthIndicator(context),
         Expanded(child: _buildEditor()),
       ],
     );
 
-    // The Character Panel opens as a right-hand sidebar beside the editor.
+    // The Character Panel and the AI Panel share a single right-hand sidebar
+    // slot beside the editor: at most one is open at a time (Req 1.2, 1.3,
+    // 1.5), so opening one closes the other and the editor keeps its width.
     return Row(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
         Expanded(child: editorColumn),
         if (_characterPanelOpen) ...<Widget>[
-          const VerticalDivider(width: 1, thickness: 1),
+          const VerticalDivider(
+            width: 1,
+            thickness: 1,
+            color: AppPalette.hairline,
+          ),
           SizedBox(
-            width: _characterPanelWidth,
+            width: _sidePanelWidth,
             child: CharacterPanelView(
               onClose: () => setState(() => _characterPanelOpen = false),
+            ),
+          ),
+        ] else if (_aiPanelOpen) ...<Widget>[
+          const VerticalDivider(
+            width: 1,
+            thickness: 1,
+            color: AppPalette.hairline,
+          ),
+          SizedBox(
+            width: _sidePanelWidth,
+            child: AiPanelView(
+              onClose: () => setState(() => _aiPanelOpen = false),
             ),
           ),
         ],
@@ -257,8 +281,21 @@ class _EditorViewState extends State<EditorView> {
     );
   }
 
-  /// The fixed width of the Character Panel sidebar when open.
-  static const double _characterPanelWidth = 320;
+  /// The fixed width of the right-hand sidebar (Character Panel or AI Panel)
+  /// when open.
+  static const double _sidePanelWidth = 340;
+
+  /// The panel toggles' style: when a panel is open its toggle sits on a
+  /// soft raised pill (instead of the theme's solid primary fill used by the
+  /// formatting toggles), so "open" reads clearly without shouting.
+  static const ButtonStyle _panelToggleStyle = ButtonStyle(
+    backgroundColor: WidgetStateProperty<Color?>.fromMap(
+      <WidgetStatesConstraint, Color?>{
+        WidgetState.selected: AppPalette.surfaceVariant,
+        WidgetState.any: null,
+      },
+    ),
+  );
 
   /// The toolbar row: the WYSIWYG [EditorToolbar] on the left and the Character
   /// Panel toggle pinned to the right (Req: "put it in the right side of the
@@ -269,7 +306,10 @@ class _EditorViewState extends State<EditorView> {
         color: AppPalette.surface,
         border: Border(bottom: BorderSide(color: AppPalette.hairline)),
       ),
-      padding: const EdgeInsets.symmetric(vertical: 4),
+      padding: const EdgeInsets.symmetric(
+        vertical: AppSpacing.xs,
+        horizontal: AppSpacing.xs,
+      ),
       child: Row(
         children: <Widget>[
           // The autosave indicator is pinned to the top-left of the toolbar
@@ -277,7 +317,13 @@ class _EditorViewState extends State<EditorView> {
           // saved.
           _buildSaveIndicator(context),
           Expanded(child: EditorToolbar(controller: _controller!)),
-          const SizedBox(width: 4),
+          // A hairline separates formatting from the document / panel actions.
+          Container(
+            width: 1,
+            height: 24,
+            margin: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
+            color: AppPalette.hairline,
+          ),
           IconButton(
             tooltip: 'Export documents',
             icon: const Icon(
@@ -286,19 +332,43 @@ class _EditorViewState extends State<EditorView> {
             ),
             onPressed: () => showExportDialog(context),
           ),
+          const SizedBox(width: AppSpacing.xxs),
           IconButton(
-            tooltip: _characterPanelOpen
-                ? 'Hide characters'
-                : 'Show characters',
+            tooltip: _aiPanelOpen ? 'Hide AI assistant' : 'Show AI assistant',
+            isSelected: _aiPanelOpen,
+            style: _panelToggleStyle,
+            icon: Icon(
+              Icons.auto_awesome,
+              color: _aiPanelOpen
+                  ? AppPalette.secondary
+                  : AppPalette.textSecondary,
+            ),
+            onPressed: () => setState(() {
+              _aiPanelOpen = !_aiPanelOpen;
+              // Both panels share the one right-hand slot; opening the AI Panel
+              // closes the Character Panel so the editor keeps its width
+              // (Req 1.5).
+              if (_aiPanelOpen) _characterPanelOpen = false;
+            }),
+          ),
+          const SizedBox(width: AppSpacing.xxs),
+          IconButton(
+            tooltip:
+                _characterPanelOpen ? 'Hide characters' : 'Show characters',
+            isSelected: _characterPanelOpen,
+            style: _panelToggleStyle,
             icon: Icon(
               Icons.people_alt_outlined,
               color: _characterPanelOpen
                   ? AppPalette.secondary
                   : AppPalette.textSecondary,
             ),
-            onPressed: () => setState(
-              () => _characterPanelOpen = !_characterPanelOpen,
-            ),
+            onPressed: () => setState(() {
+              _characterPanelOpen = !_characterPanelOpen;
+              // Opening the Character Panel closes the AI Panel — the two
+              // panels are mutually exclusive in the shared slot (Req 1.5).
+              if (_characterPanelOpen) _aiPanelOpen = false;
+            }),
           ),
           const SizedBox(width: 4),
         ],
@@ -359,9 +429,9 @@ class _EditorViewState extends State<EditorView> {
     // A soft, rounded status pill so the indicator reads as a distinct chip
     // rather than loose text next to the toolbar.
     return Padding(
-      padding: const EdgeInsets.only(left: 12, right: 4),
+      padding: const EdgeInsets.only(left: AppSpacing.sm, right: AppSpacing.xs),
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
+        duration: AppMotion.medium,
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
           color: AppPalette.surfaceVariant,
@@ -389,16 +459,43 @@ class _EditorViewState extends State<EditorView> {
   /// The no-active-document placeholder prompting the user to select or create
   /// a document (Req 14.10). Contains no editor, so input is rejected.
   Widget _buildPlaceholder(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Text(
-          'Select a document from the list, or create a new one to start '
-          'writing.',
-          textAlign: TextAlign.center,
-          style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                color: AppPalette.textSecondary,
-              ),
+    return DecoratedBox(
+      decoration: const BoxDecoration(gradient: AppStyle.appBackground),
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.xl),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 420),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                Container(
+                  width: 64,
+                  height: 64,
+                  decoration: BoxDecoration(
+                    color: AppPalette.surfaceVariant,
+                    borderRadius: AppStyle.cardRadius,
+                    border: Border.all(color: AppPalette.hairline),
+                  ),
+                  child: const Icon(
+                    Icons.edit_note_rounded,
+                    size: 34,
+                    color: AppPalette.secondary,
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.lg),
+                Text(
+                  'Select a document from the list, or create a new one to '
+                  'start writing.',
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                        color: AppPalette.textSecondary,
+                        height: 1.5,
+                      ),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );
@@ -422,14 +519,11 @@ class _EditorViewState extends State<EditorView> {
     );
 
     return Container(
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: <Color>[AppPalette.surface, Color(0xFF0E1729)],
-        ),
+      decoration: const BoxDecoration(gradient: AppStyle.panelSurface),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.xl - 4,
+        vertical: AppSpacing.md + 2,
       ),
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
       child: Row(
         children: <Widget>[
           Expanded(
@@ -438,6 +532,7 @@ class _EditorViewState extends State<EditorView> {
                 : InkWell(
                     onTap: widget.onRenameRequested,
                     borderRadius: AppStyle.pillRadius,
+                    focusColor: AppPalette.pressedOverlay,
                     child: Row(
                       children: <Widget>[
                         Flexible(child: titleText),
@@ -463,10 +558,14 @@ class _EditorViewState extends State<EditorView> {
   Widget _buildWordCount(BuildContext context) {
     final String label = _wordCount == 1 ? '1 word' : '$_wordCount words';
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.md,
+        vertical: AppSpacing.xs + 1,
+      ),
       decoration: BoxDecoration(
         color: AppPalette.surfaceVariant,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: AppStyle.pillRadius,
+        border: Border.all(color: AppPalette.hairline),
       ),
       child: Text(
         label,
@@ -503,16 +602,35 @@ class _EditorViewState extends State<EditorView> {
   /// wired in [_syncToDocument]; the state layer enforces the cap
   /// authoritatively (Req 14.8, 15.4).
   Widget _buildEditor() {
-    return Container(
+    return LayoutBuilder(
+      builder: (BuildContext context, BoxConstraints constraints) {
+        // Keep the manuscript at a comfortable reading measure on wide desktop
+        // windows. The margin is applied *inside* the editor's scroll view so
+        // the wheel scrolls anywhere and the scrollbar stays at the edge.
+        final double side =
+            constraints.maxWidth > _maxMeasure + 2 * AppSpacing.xl
+                ? (constraints.maxWidth - _maxMeasure) / 2
+                : AppSpacing.xl;
+        return _buildQuillEditor(
+          EdgeInsets.fromLTRB(side, AppSpacing.lg, side, AppSpacing.xxl),
+        );
+      },
+    );
+  }
+
+  /// The widest the manuscript text column grows, in logical pixels.
+  static const double _maxMeasure = 860;
+
+  Widget _buildQuillEditor(EdgeInsets padding) {
+    return ColoredBox(
       color: AppPalette.background,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: QuillEditor(
         controller: _controller!,
         focusNode: _editorFocusNode,
         scrollController: _editorScrollController,
         config: QuillEditorConfig(
           placeholder: 'Start writing…',
-          padding: EdgeInsets.zero,
+          padding: padding,
           expands: true,
           scrollable: true,
           autoFocus: false,
@@ -683,4 +801,3 @@ class _EditorViewState extends State<EditorView> {
     ),
   );
 }
-

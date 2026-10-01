@@ -31,7 +31,8 @@ abstract class ProjectRepository {
   /// (Req 2.2).
   Future<Project> create(Project project);
 
-  /// Persists name / last-modified changes for an existing project (Req 3.2).
+  /// Persists name / cover-photo / last-modified changes for an existing
+  /// project (Req 3.2).
   Future<void> update(Project project);
 
   /// Removes the project identified by [id] **and all of its folders and
