@@ -44,6 +44,11 @@ All notable changes to Spwrite are recorded here. The format follows
   Chromium offer is skipped.
 - New `WEB_HOST` setting (default `localhost`) for the web version's listening
   address, with a warning when it's opened to the network.
+- **Linux build failed in the AI runtime** ("building assets for package:
+  fllama failed", "Target build_hooks failed"). The fllama build compiles
+  llama.cpp with `aarch64-linux-gnu-gcc`/`g++` (or the x86_64 versions), which
+  come from GCC, but the installer only installed clang. It now also installs
+  `build-essential` (apt), `gcc gcc-c++` (dnf, zypper) or `gcc` (pacman).
 - The installer now reports the Linux app on ARM (`build/linux/arm64/...`) and
   uses the correct binary name (`spwrite`).
 

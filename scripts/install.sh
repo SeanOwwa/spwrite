@@ -303,19 +303,19 @@ linux_packages() {
   case "$LINUX_PM" in
     apt)
       base="curl git unzip xz-utils zip"
-      desktop="clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev $(apt_pick libstdc++-12-dev libstdc++-13-dev libstdc++-14-dev libstdc++-11-dev) libsqlite3-dev libsecret-1-dev libglu1-mesa"
+      desktop="build-essential clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev $(apt_pick libstdc++-12-dev libstdc++-13-dev libstdc++-14-dev libstdc++-11-dev) libsqlite3-dev libsecret-1-dev libglu1-mesa"
       ;;
     dnf)
       base="curl git unzip xz zip which"
-      desktop="clang cmake ninja-build pkgconf-pkg-config gtk3-devel xz-devel libstdc++-devel sqlite-devel libsecret-devel mesa-libGLU"
+      desktop="gcc gcc-c++ clang cmake ninja-build pkgconf-pkg-config gtk3-devel xz-devel libstdc++-devel sqlite-devel libsecret-devel mesa-libGLU"
       ;;
     pacman)
       base="curl git unzip xz zip which"
-      desktop="clang cmake ninja pkgconf gtk3 gcc-libs sqlite libsecret glu"
+      desktop="gcc clang cmake ninja pkgconf gtk3 gcc-libs sqlite libsecret glu"
       ;;
     zypper)
       base="curl git unzip xz zip which"
-      desktop="clang cmake ninja pkg-config gtk3-devel xz-devel libstdc++-devel sqlite3-devel libsecret-devel glu-devel"
+      desktop="gcc gcc-c++ clang cmake ninja pkg-config gtk3-devel xz-devel libstdc++-devel sqlite3-devel libsecret-devel glu-devel"
       ;;
   esac
   if [ "$PLATFORM" = "linux" ]; then
