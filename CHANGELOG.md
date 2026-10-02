@@ -17,6 +17,10 @@ All notable changes to Spwrite are recorded here. The format follows
   started a second transfer into the same temporary file, so both failed their
   checksum. Only one download per model runs now; a reopened panel joins it and
   shows its progress.
+- **The Windows app didn't start after moving its folder to another PC**
+  ("MSVCP140.dll / VCRUNTIME140.dll was not found"). The build now copies the
+  Microsoft Visual C++ runtime DLLs into the `Release` folder, so the folder
+  runs on PCs without the VC++ Redistributable installed.
 - **Model download "failed integrity check" (seen on Linux).** A transfer that
   ends early, or a proxy or sign-in page answering instead of Hugging Face,
   produced a checksum error with no hint why. Downloads are now checked for the

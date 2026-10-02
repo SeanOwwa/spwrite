@@ -87,6 +87,15 @@ if(PLUGIN_BUNDLED_LIBRARIES)
     COMPONENT Runtime)
 endif()
 
+# Ship the Microsoft Visual C++ runtime (msvcp140.dll, vcruntime140.dll,
+# vcruntime140_1.dll) next to spwrite.exe. Without it the Release folder only
+# starts on PCs that already have the VC++ Redistributable, so copying it to
+# another PC fails with "MSVCP140.dll was not found". Microsoft allows
+# redistributing these files with an application.
+set(CMAKE_INSTALL_SYSTEM_RUNTIME_DESTINATION "${INSTALL_BUNDLE_LIB_DIR}")
+set(CMAKE_INSTALL_SYSTEM_RUNTIME_COMPONENT Runtime)
+include(InstallRequiredSystemLibraries)
+
 # Copy the native assets provided by the build.dart from all packages.
 set(NATIVE_ASSETS_DIR "${PROJECT_BUILD_DIR}native_assets/windows/")
 install(DIRECTORY "${NATIVE_ASSETS_DIR}"
