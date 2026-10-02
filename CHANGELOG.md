@@ -21,6 +21,11 @@ All notable changes to Spwrite are recorded here. The format follows
   ("MSVCP140.dll / VCRUNTIME140.dll was not found"). The build now copies the
   Microsoft Visual C++ runtime DLLs into the `Release` folder, so the folder
   runs on PCs without the VC++ Redistributable installed.
+- **The Windows installer now installs the app** to
+  `%LOCALAPPDATA%\Programs\Spwrite` and adds Desktop and Start menu shortcuts
+  (after asking). Copying the `Release` folder by hand to a OneDrive-synced
+  Desktop could leave the app silently refusing to start. It also finds the
+  ARM64 build (`build\windows\arm64\...`).
 - **Model download "failed integrity check" (seen on Linux).** A transfer that
   ends early, or a proxy or sign-in page answering instead of Hugging Face,
   produced a checksum error with no hint why. Downloads are now checked for the

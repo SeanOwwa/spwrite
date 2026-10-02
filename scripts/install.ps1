@@ -351,6 +351,36 @@ function Invoke-Bootstrap {
   }
 }
 
+# Copies the built Release folder to a real install location and adds Desktop
+# and Start menu shortcuts. Shortcuts are the reliable way to open Spwrite from
+# the Desktop: the .exe must stay next to its DLLs and its data folder, and a
+# Desktop that OneDrive syncs can leave copied files "online-only".
+function Install-SpwriteApp($releaseDir) {
+  $target = Join-Path $env:LOCALAPPDATA 'Programs\Spwrite'
+  if (-not (Confirm-Step "Install Spwrite to $target and add Desktop and Start menu shortcuts?")) {
+    Write-Step "Skipped. Run it from: $releaseDir\spwrite.exe (keep that whole folder together)."
+    return
+  }
+  if (Test-Path $target) { Remove-Item -Recurse -Force $target }
+  New-Item -ItemType Directory -Force -Path $target | Out-Null
+  Copy-Item -Path (Join-Path $releaseDir '*') -Destination $target -Recurse -Force
+  Get-ChildItem -Recurse $target | Unblock-File -ErrorAction SilentlyContinue
+
+  $exePath = Join-Path $target 'spwrite.exe'
+  $shell = New-Object -ComObject WScript.Shell
+  $desktop = [Environment]::GetFolderPath('Desktop')
+  $startMenu = Join-Path ([Environment]::GetFolderPath('Programs')) 'Spwrite.lnk'
+  foreach ($lnkPath in @((Join-Path $desktop 'Spwrite.lnk'), $startMenu)) {
+    $lnk = $shell.CreateShortcut($lnkPath)
+    $lnk.TargetPath = $exePath
+    $lnk.WorkingDirectory = $target   # the app looks for data\ next to itself
+    $lnk.IconLocation = "$exePath,0"
+    $lnk.Save()
+  }
+  Write-Step "Installed to $target"
+  Write-Step "Open Spwrite from the Desktop shortcut or the Start menu."
+}
+
 # Resolve the project root (parent of this scripts\ directory).
 $ScriptDir   = Split-Path -Parent $MyInvocation.MyCommand.Path
 $ProjectRoot = Split-Path -Parent $ScriptDir
@@ -439,10 +469,12 @@ Write-Step "Build complete."
 # Point the user at the finished, standalone artifact.
 switch ($Platform) {
   'windows' {
-    $exe = Get-ChildItem -Path 'build\windows\x64\runner\Release' -Filter '*.exe' -ErrorAction SilentlyContinue | Select-Object -First 1
+    # x64 or arm64, depending on this PC.
+    $exe = Get-ChildItem -Path 'build\windows' -Recurse -Filter 'spwrite.exe' -ErrorAction SilentlyContinue |
+      Where-Object { $_.DirectoryName -like '*\runner\Release' } | Select-Object -First 1
     if ($exe) {
       Write-Step "Your app is ready: $($exe.FullName)"
-      Write-Step "Double-click the .exe, or copy the whole 'Release' folder to your Desktop."
+      Install-SpwriteApp $exe.Directory.FullName
     }
   }
   'web' {
