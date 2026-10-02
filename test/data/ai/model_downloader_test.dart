@@ -151,6 +151,27 @@ void main() {
     }
   });
 
+  test('concurrent downloads of one model share a single transfer', () async {
+    final _FakeStreamingClient client = _FakeStreamingClient(modelBytes);
+    final ModelDownloader downloader = ModelDownloader(
+      client: client,
+      directoryResolver: resolver,
+    );
+    addTearDown(downloader.close);
+
+    int secondProgress = 0;
+    final Future<String> first = downloader.download(model);
+    final Future<String> second = downloader.download(
+      model,
+      onProgress: (int received, int? total) => secondProgress++,
+    );
+    expect(identical(first, second), isTrue);
+    final List<String> paths = await Future.wait(<Future<String>>[first, second]);
+    expect(paths.toSet(), <String>{cachedPath()});
+    expect(await File(cachedPath()).readAsBytes(), equals(modelBytes));
+    expect(secondProgress, greaterThan(0));
+  });
+
   test(
     'success: verifies, caches at <id>.gguf, leaves no .part, reports progress',
     () async {

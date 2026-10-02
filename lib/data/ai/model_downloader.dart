@@ -239,6 +239,36 @@ class ModelDownloader {
   Future<String> download(
     ModelMetadata model, {
     DownloadProgressCallback? onProgress,
+  }) {
+    // One transfer per model at a time. Closing and reopening a project while
+    // a download runs creates a new assistant state that may start the same
+    // download again; two writers on the same `.part` file corrupt it and both
+    // fail verification. Later callers join the running transfer instead and
+    // receive its progress too.
+    final _InFlightDownload? running = _inFlight[model.id];
+    if (running != null) {
+      if (onProgress != null) running.listeners.add(onProgress);
+      return running.future;
+    }
+    final _InFlightDownload entry = _InFlightDownload();
+    if (onProgress != null) entry.listeners.add(onProgress);
+    _inFlight[model.id] = entry;
+    entry.future = _download(model, onProgress: (int received, int? total) {
+      for (final DownloadProgressCallback cb
+          in List<DownloadProgressCallback>.of(entry.listeners)) {
+        cb(received, total);
+      }
+    }).whenComplete(() => _inFlight.remove(model.id));
+    return entry.future;
+  }
+
+  /// Downloads currently running, keyed by model id (see [download]).
+  final Map<String, _InFlightDownload> _inFlight =
+      <String, _InFlightDownload>{};
+
+  Future<String> _download(
+    ModelMetadata model, {
+    DownloadProgressCallback? onProgress,
   }) async {
     final Directory dir = await _directoryResolver();
     await dir.create(recursive: true);
@@ -527,4 +557,10 @@ class _DigestCollector implements Sink<Digest> {
 
   @override
   void close() {}
+}
+
+/// A running [ModelDownloader.download] shared by every caller for one model.
+class _InFlightDownload {
+  late Future<String> future;
+  final List<DownloadProgressCallback> listeners = <DownloadProgressCallback>[];
 }

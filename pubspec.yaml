@@ -1,7 +1,7 @@
 name: spwrite
 description: "Spwrite — a cross-platform writing app with a project/folder/document sidebar, WYSIWYG editor, and local SQLite persistence."
 publish_to: "none"
-version: 1.2.2+4
+version: 1.2.3+5
 
 environment:
   sdk: ">=3.4.0 <4.0.0"

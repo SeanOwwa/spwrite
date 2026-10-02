@@ -985,6 +985,15 @@ class AiAssistantState extends ChangeNotifier {
   /// shared across the app, so this state only removes its own listener and does
   /// **not** dispose the probe — whoever constructed the probe owns its
   /// lifecycle. The `ModelDownloader.close()` is likewise left to its owner.
+  /// Async work (a download, a generation stream, a retrieval) can finish
+  /// after the project closes and this state is disposed. Ignore those late
+  /// notifications instead of throwing "used after being disposed".
+  @override
+  void notifyListeners() {
+    if (_disposed) return;
+    super.notifyListeners();
+  }
+
   @override
   void dispose() {
     _disposed = true;

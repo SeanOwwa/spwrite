@@ -1,6 +1,6 @@
 # Spwrite
 
-**Beta 1.2.2** · macOS, Windows, Linux, and web
+**Beta 1.2.3** · macOS, Windows, Linux, and web
 
 A calm, distraction-free writing app for your own computer. Organize your work
 into **projects**, **folders**, and **documents**, and write in a clean editor
@@ -24,7 +24,7 @@ browser. There are no phone or tablet versions.
   portrait book-cover cards. Clear focus rings, hover feedback, tooltips, and
   roomy click targets make it comfortable with a mouse or keyboard, and the
   writing column stays at a comfortable reading width. The current version
-  (e.g. "Beta 1.2.2") is shown quietly next to the Projects title.
+  (e.g. "Beta 1.2.3") is shown quietly next to the Projects title.
 
 ## What you can do
 

@@ -4,6 +4,43 @@ All notable changes to Spwrite are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [1.2.3] (Beta) - Unreleased
+
+### Fixed
+
+- **SpwriteBot crashed or errored on Windows while downloading or chatting**
+  ("A AiAssistantState was used after being disposed"). A model download kept
+  running after its project was closed, then tried to update the panel that no
+  longer existed. Late updates from downloads, replies and indexing are now
+  ignored once the project closes.
+- **Repeated model downloads clashed.** Reopening a project during a download
+  started a second transfer into the same temporary file, so both failed their
+  checksum. Only one download per model runs now; a reopened panel joins it and
+  shows its progress.
+- **Installing on a Linux server without a screen** (e.g. Ubuntu Server over
+  SSH) failed with "cannot open display" and "Error waiting for a debug
+  connection". The installer now detects a missing graphical session, still
+  builds the app, and offers (apt) to install a lightweight remote desktop
+  (XFCE + xrdp). It then prints how to connect through an SSH tunnel and
+  where the `spwrite` binary is, instead of trying to open a window. The
+  Chromium offer is skipped.
+- New `WEB_HOST` setting (default `localhost`) for the web version's listening
+  address, with a warning when it's opened to the network.
+- **Linux build failed in the AI runtime** ("building assets for package:
+  fllama failed", "Target build_hooks failed"). The fllama build compiles
+  llama.cpp with `aarch64-linux-gnu-gcc`/`g++` (or the x86_64 versions), which
+  come from GCC, but the installer only installed clang. It now also installs
+  `build-essential` (apt), `gcc gcc-c++` (dnf, zypper) or `gcc` (pacman).
+- The installer now reports the Linux app on ARM (`build/linux/arm64/...`) and
+  uses the correct binary name (`spwrite`).
+
+### Known limitations
+
+- On Windows in a virtual machine, the app can still close while SpwriteBot
+  generates a reply. The AI engine depends on the CPU and graphics features the
+  VM exposes, and on enough memory (8 GB recommended). Writing, editing and
+  keyword search are unaffected.
+
 ## [1.2.2] (Beta) - Unreleased
 
 ### Added
@@ -32,25 +69,6 @@ All notable changes to Spwrite are recorded here. The format follows
 - **Database schema v7 → v8.** Adds a small `app_settings` key/value table
   (used for the remembered export folder). The upgrade only creates the table;
   existing projects, documents, characters, and conversations are untouched.
-
-### Fixed
-
-- **Installing on a Linux server without a screen** (e.g. Ubuntu Server over
-  SSH) failed with "cannot open display" and "Error waiting for a debug
-  connection". The installer now detects a missing graphical session, still
-  builds the app, and offers (apt) to install a lightweight remote desktop
-  (XFCE + xrdp). It then prints how to connect through an SSH tunnel and
-  where the `spwrite` binary is, instead of trying to open a window. The
-  Chromium offer is skipped.
-- New `WEB_HOST` setting (default `localhost`) for the web version's listening
-  address, with a warning when it's opened to the network.
-- **Linux build failed in the AI runtime** ("building assets for package:
-  fllama failed", "Target build_hooks failed"). The fllama build compiles
-  llama.cpp with `aarch64-linux-gnu-gcc`/`g++` (or the x86_64 versions), which
-  come from GCC, but the installer only installed clang. It now also installs
-  `build-essential` (apt), `gcc gcc-c++` (dnf, zypper) or `gcc` (pacman).
-- The installer now reports the Linux app on ARM (`build/linux/arm64/...`) and
-  uses the correct binary name (`spwrite`).
 
 ## [1.2.1] (Beta) - Unreleased
 

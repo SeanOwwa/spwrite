@@ -624,6 +624,15 @@ class IndexingState extends ChangeNotifier {
   /// callback never mutates a disposed notifier. It does **not** own or dispose
   /// the [ProjectIndexer]'s embedding model or the [ModelDownloader] — those are
   /// app-lifetime collaborators owned by the composition root.
+  /// Async work (a download, a generation stream, a retrieval) can finish
+  /// after the project closes and this state is disposed. Ignore those late
+  /// notifications instead of throwing "used after being disposed".
+  @override
+  void notifyListeners() {
+    if (_disposed) return;
+    super.notifyListeners();
+  }
+
   @override
   void dispose() {
     _disposed = true;

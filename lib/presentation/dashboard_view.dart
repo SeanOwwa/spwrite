@@ -244,7 +244,7 @@ class _DashboardViewState extends State<DashboardView> {
                       child: Text('Projects', style: text.headlineMedium),
                     ),
                     const SizedBox(width: AppSpacing.sm),
-                    // Small, subtle release label (e.g. "Beta 1.2.2") so
+                    // Small, subtle release label (e.g. "Beta 1.2.3") so
                     // testers can tell which build they are running.
                     Semantics(
                       container: true,
