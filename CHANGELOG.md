@@ -17,6 +17,12 @@ All notable changes to Spwrite are recorded here. The format follows
   started a second transfer into the same temporary file, so both failed their
   checksum. Only one download per model runs now; a reopened panel joins it and
   shows its progress.
+- **Model download "failed integrity check" (seen on Linux).** A transfer that
+  ends early, or a proxy or sign-in page answering instead of Hugging Face,
+  produced a checksum error with no hint why. Downloads are now checked for the
+  full size and for a real GGUF file before the checksum, with a plain message
+  for each case, and a failed transfer is retried once from scratch
+  automatically.
 - **Installing on a Linux server without a screen** (e.g. Ubuntu Server over
   SSH) failed with "cannot open display" and "Error waiting for a debug
   connection". The installer now detects a missing graphical session, still

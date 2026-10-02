@@ -76,10 +76,20 @@ class ModelDownloadException implements Exception {
   /// requires an internet connection rather than offer a plain retry (Req 3.4).
   final bool isOffline;
 
+  /// Whether the transfer finished but the file was wrong: incomplete, not a
+  /// GGUF model, or a checksum mismatch. These are retried once automatically.
+  final bool isIntegrityFailure;
+
   const ModelDownloadException(
     this.message, [
     this.cause,
-  ]) : isOffline = false;
+  ])  : isOffline = false,
+        isIntegrityFailure = false;
+
+  /// The downloaded file failed verification (see [isIntegrityFailure]).
+  const ModelDownloadException.integrity(this.message, [this.cause])
+      : isOffline = false,
+        isIntegrityFailure = true;
 
   /// A connectivity failure: the download couldn't reach the network. Sets
   /// [isOffline] so callers can surface the "needs an internet connection"
@@ -90,7 +100,8 @@ class ModelDownloadException implements Exception {
         'Connect to the internet and try again; the app remains usable '
         'without the assistant until then.',
     this.cause,
-  ]) : isOffline = true;
+  ])  : isOffline = true,
+        isIntegrityFailure = false;
 
   @override
   String toString() => cause == null
@@ -266,7 +277,23 @@ class ModelDownloader {
   final Map<String, _InFlightDownload> _inFlight =
       <String, _InFlightDownload>{};
 
+  /// Downloads [model], retrying once from scratch when the result fails
+  /// verification (truncated transfer, wrong content, corrupt resume). The
+  /// failed attempt has already deleted its `.part`, so the retry is a clean
+  /// full download.
   Future<String> _download(
+    ModelMetadata model, {
+    DownloadProgressCallback? onProgress,
+  }) async {
+    try {
+      return await _downloadOnce(model, onProgress: onProgress);
+    } on ModelDownloadException catch (error) {
+      if (!error.isIntegrityFailure) rethrow;
+      return _downloadOnce(model, onProgress: onProgress);
+    }
+  }
+
+  Future<String> _downloadOnce(
     ModelMetadata model, {
     DownloadProgressCallback? onProgress,
   }) async {
@@ -371,13 +398,34 @@ class ModelDownloader {
       await sink.close();
       sink = null;
 
+      // A connection that drops mid-transfer can end the stream without an
+      // error. Catch that here with a clear message instead of a checksum
+      // mismatch.
+      final int expectedSize = model.sizeBytes;
+      if (expectedSize > 0 && received != expectedSize) {
+        throw ModelDownloadException.integrity(
+          'The download was incomplete ($received of $expectedSize bytes). '
+          'The connection may have dropped. Please try again.',
+        );
+      }
+
+      // Every GGUF file starts with the bytes "GGUF". Anything else (often an
+      // HTML page from a proxy, firewall or captive portal) is the wrong file.
+      if (!await _hasGgufMagic(tempFile)) {
+        throw const ModelDownloadException.integrity(
+          'The server sent something that is not the model file. A proxy, '
+          'firewall or sign-in page on this network may be intercepting the '
+          'download. Try another network, or switch off VPN or proxy software.',
+        );
+      }
+
       // Hash the full assembled file from disk. Resuming means we never held a
       // running hash over the earlier bytes, so we (re-)hash the complete file;
       // this also verifies a fresh download identically (Req 3.5, 3.7).
       final String actualDigest = await _hashFile(tempFile);
       final String expectedDigest = model.sha256.toLowerCase();
       if (actualDigest != expectedDigest) {
-        throw ModelDownloadException(
+        throw ModelDownloadException.integrity(
           'Downloaded model failed integrity check: expected sha256 '
           '$expectedDigest but got $actualDigest.',
         );
@@ -457,6 +505,25 @@ class ModelDownloader {
   /// The final cached file for [model] under [dir]: `<dir>/<id>.gguf`.
   File _cachedFile(Directory dir, ModelMetadata model) {
     return File(_join(dir.path, '${model.id}$_modelExtension'));
+  }
+
+  /// Whether [file] starts with the GGUF magic bytes (`G` `G` `U` `F`).
+  Future<bool> _hasGgufMagic(File file) async {
+    try {
+      final RandomAccessFile raf = await file.open();
+      try {
+        final List<int> head = await raf.read(4);
+        return head.length == 4 &&
+            head[0] == 0x47 &&
+            head[1] == 0x47 &&
+            head[2] == 0x55 &&
+            head[3] == 0x46;
+      } finally {
+        await raf.close();
+      }
+    } catch (_) {
+      return false;
+    }
   }
 
   /// The in-progress temp file for [model] under [dir]: `<dir>/<id>.gguf.part`.

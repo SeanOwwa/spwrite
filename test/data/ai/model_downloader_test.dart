@@ -67,6 +67,27 @@ class _FakeStreamingClient extends http.BaseClient {
   }
 }
 
+/// Fake client that returns [bodies] in order, one per send() (the last one
+/// repeats). Used to check the automatic retry after a bad first transfer.
+class _SequenceClient extends http.BaseClient {
+  _SequenceClient(this.bodies);
+
+  final List<List<int>> bodies;
+  int sendCount = 0;
+
+  @override
+  Future<http.StreamedResponse> send(http.BaseRequest request) async {
+    final List<int> body = bodies[sendCount.clamp(0, bodies.length - 1)];
+    sendCount += 1;
+    return http.StreamedResponse(
+      Stream<List<int>>.fromIterable(<List<int>>[body]),
+      200,
+      contentLength: body.length,
+      request: request,
+    );
+  }
+}
+
 /// Fake client whose send() throws a SocketException, simulating a device with
 /// no connectivity (host lookup failure). The downloader classifies this as an
 /// offline failure (Req 3.4).
@@ -122,7 +143,7 @@ void main() {
 
   // A small deterministic byte payload standing in for the (much larger) GGUF.
   final Uint8List modelBytes =
-      Uint8List.fromList(utf8.encode('the-local-model-gguf-bytes'));
+      Uint8List.fromList(utf8.encode('GGUF-the-local-model-bytes'));
   final String modelSha256 = sha256.convert(modelBytes).toString();
 
   // ModelMetadata whose sha256 matches the payload above, so the success path
@@ -149,6 +170,60 @@ void main() {
     if (await tempDir.exists()) {
       await tempDir.delete(recursive: true);
     }
+  });
+
+  test('a bad first transfer is retried once and then succeeds', () async {
+    final _SequenceClient client = _SequenceClient(<List<int>>[
+      modelBytes.sublist(0, modelBytes.length - 3), // truncated
+      modelBytes,
+    ]);
+    final ModelDownloader downloader =
+        ModelDownloader(client: client, directoryResolver: resolver);
+    addTearDown(downloader.close);
+
+    final String path = await downloader.download(model);
+    expect(client.sendCount, 2);
+    expect(await File(path).readAsBytes(), equals(modelBytes));
+    expect(await File(partPath()).exists(), isFalse);
+  });
+
+  test('an incomplete download is reported clearly after the retry', () async {
+    final _SequenceClient client = _SequenceClient(<List<int>>[
+      modelBytes.sublist(0, modelBytes.length - 3),
+    ]);
+    final ModelDownloader downloader =
+        ModelDownloader(client: client, directoryResolver: resolver);
+    addTearDown(downloader.close);
+
+    await expectLater(
+      downloader.download(model),
+      throwsA(isA<ModelDownloadException>()
+          .having((ModelDownloadException e) => e.message, 'message',
+              contains('incomplete'))
+          .having((ModelDownloadException e) => e.isOffline, 'offline',
+              isFalse)),
+    );
+    expect(client.sendCount, 2);
+    expect(await File(partPath()).exists(), isFalse);
+    expect(await File(cachedPath()).exists(), isFalse);
+  });
+
+  test('a non-GGUF body (e.g. a proxy HTML page) is rejected', () async {
+    final List<int> html = utf8.encode('<html>blocked</html>'.padRight(
+        modelBytes.length, ' '));
+    final _SequenceClient client = _SequenceClient(<List<int>>[html]);
+    final ModelDownloader downloader =
+        ModelDownloader(client: client, directoryResolver: resolver);
+    addTearDown(downloader.close);
+
+    await expectLater(
+      downloader.download(model),
+      throwsA(isA<ModelDownloadException>().having(
+          (ModelDownloadException e) => e.message,
+          'message',
+          contains('not the model file'))),
+    );
+    expect(await File(cachedPath()).exists(), isFalse);
   });
 
   test('concurrent downloads of one model share a single transfer', () async {
