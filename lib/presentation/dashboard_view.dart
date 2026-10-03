@@ -28,6 +28,7 @@ import '../app_info.dart';
 
 import '../domain/project.dart';
 import '../state/app_navigation_state.dart';
+import '../state/guide_visibility_state.dart';
 import '../state/load_status.dart';
 import '../theme/app_theme.dart';
 import 'delete_confirmation_dialog.dart';
@@ -140,7 +141,15 @@ class _DashboardViewState extends State<DashboardView> {
   @override
   Widget build(BuildContext context) {
     final AppNavigationState state = context.watch<AppNavigationState>();
-    final List<Project> projects = state.projects;
+    // The built-in guides are pinned first, unless the "Guides" switch hides
+    // them. The visibility state is optional so the dashboard also works
+    // without it (guides then stay visible).
+    final bool showGuides =
+        context.watch<GuideVisibilityState?>()?.visible ?? true;
+    final List<Project> projects = <Project>[
+      if (showGuides) ...state.builtInProjects,
+      ...state.userProjects,
+    ];
     final bool hasLoadError = state.projectsStatus == LoadStatus.error;
     final bool isLoading =
         state.projectsStatus == LoadStatus.loading && projects.isEmpty;
@@ -210,7 +219,8 @@ class _DashboardViewState extends State<DashboardView> {
   /// version label and a count, and the New-project control (Req 2.1).
   Widget _buildHeader(BuildContext context, AppNavigationState state) {
     final TextTheme text = Theme.of(context).textTheme;
-    final int count = state.projects.length;
+    // Count only the writer's own projects; the guides are always there.
+    final int count = state.userProjects.length;
     final String subtitle = count == 0
         ? 'No projects yet'
         : count == 1
@@ -271,6 +281,10 @@ class _DashboardViewState extends State<DashboardView> {
             ),
           ),
           const SizedBox(width: AppSpacing.md),
+          if (state.builtInProjects.isNotEmpty) ...<Widget>[
+            const _GuidesSwitch(),
+            const SizedBox(width: AppSpacing.md),
+          ],
           Tooltip(
             message: 'New project ($shortcut)',
             child: FilledButton.icon(
@@ -368,12 +382,18 @@ class _DashboardViewState extends State<DashboardView> {
           itemCount: projects.length,
           itemBuilder: (BuildContext context, int index) {
             final Project project = projects[index];
+            // Built-in guides open like any project but cannot be edited or
+            // deleted; the header switch hides them instead.
+            final bool builtIn = state.isBuiltIn(project.id);
             return ProjectCard(
               key: ValueKey<String>('project-card-${project.id}'),
               project: project,
               onOpen: () => state.openProject(project.id),
-              onRename: () => _edit(state, project),
-              onDelete: () => _confirmDelete(context, state, project),
+              onRename: builtIn ? null : () => _edit(state, project),
+              onDelete: builtIn
+                  ? null
+                  : () => _confirmDelete(context, state, project),
+              caption: builtIn ? 'Built-in guide · read-only' : null,
             );
           },
         );
@@ -411,6 +431,41 @@ class _LogoTile extends StatelessWidget {
         'assets/images/spwrite_logo.png',
         fit: BoxFit.contain,
         semanticLabel: 'Spwrite logo',
+      ),
+    );
+  }
+}
+
+/// The "Guides" switch beside New project: shows or hides the built-in User
+/// Guide and Developer Guide projects. The choice is remembered.
+class _GuidesSwitch extends StatelessWidget {
+  const _GuidesSwitch();
+
+  @override
+  Widget build(BuildContext context) {
+    final GuideVisibilityState? guides = context.watch<GuideVisibilityState?>();
+    if (guides == null) return const SizedBox.shrink();
+    final bool visible = guides.visible;
+    return Tooltip(
+      message: visible ? 'Hide the built-in guides' : 'Show the built-in guides',
+      child: MergeSemantics(
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            Text(
+              'Guides',
+              style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                    color: AppPalette.textSecondary,
+                  ),
+            ),
+            const SizedBox(width: AppSpacing.xs),
+            Switch(
+              key: const ValueKey<String>('dashboard-guides-switch'),
+              value: visible,
+              onChanged: guides.setVisible,
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -185,12 +185,15 @@ class _EditorViewState extends State<EditorView> {
       case EditorCommand.bulletedList:
         if (controller != null) _toggleList(controller, Attribute.ul);
       case EditorCommand.redo:
-        if (controller != null && controller.hasRedo) controller.redo();
+        if (controller != null && !controller.readOnly && controller.hasRedo) {
+          controller.redo();
+        }
     }
   }
 
   /// Applies [list] to the selected lines, or removes it if already applied.
   void _toggleList(QuillController controller, Attribute<String?> list) {
+    if (controller.readOnly) return;
     final Attribute<Object?>? current =
         controller.getSelectionStyle().attributes[Attribute.list.key];
     controller.formatSelection(
@@ -239,6 +242,8 @@ class _EditorViewState extends State<EditorView> {
     final QuillController controller = QuillController(
       document: quill.Document.fromDelta(delta),
       selection: const TextSelection.collapsed(offset: 0),
+      // Built-in guides can be read, selected and copied, but not edited.
+      readOnly: state.isReadOnly,
     );
 
     // Seed the word count from the freshly loaded document.
@@ -453,7 +458,11 @@ class _EditorViewState extends State<EditorView> {
           // line so the writer can see at a glance that their text is being
           // saved.
           _buildSaveIndicator(context),
-          Expanded(child: EditorToolbar(controller: _controller!)),
+          Expanded(
+            child: context.read<ProjectWorkspaceState>().isReadOnly
+                ? _buildReadOnlyLabel(context)
+                : EditorToolbar(controller: _controller!),
+          ),
           // A hairline separates formatting from the document / panel actions.
           Container(
             width: 1,
@@ -488,6 +497,8 @@ class _EditorViewState extends State<EditorView> {
               if (_aiPanelOpen) _characterPanelOpen = false;
             }),
           ),
+          // Guides have no characters to manage.
+          if (!context.read<ProjectWorkspaceState>().isReadOnly) ...<Widget>[
           const SizedBox(width: AppSpacing.xxs),
           IconButton(
             tooltip:
@@ -507,9 +518,34 @@ class _EditorViewState extends State<EditorView> {
               if (_characterPanelOpen) _aiPanelOpen = false;
             }),
           ),
+          ],
           const SizedBox(width: 4),
         ],
       ),
+    );
+  }
+
+  /// Shown in place of the formatting toolbar for a read-only guide.
+  Widget _buildReadOnlyLabel(BuildContext context) {
+    return Row(
+      children: <Widget>[
+        const SizedBox(width: AppSpacing.sm),
+        const Icon(
+          Icons.menu_book_outlined,
+          size: 18,
+          color: AppPalette.secondary,
+        ),
+        const SizedBox(width: AppSpacing.sm),
+        Flexible(
+          child: Text(
+            'Built-in guide · read-only. You can select and copy text.',
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: AppPalette.textSecondary,
+                ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -882,7 +918,7 @@ class _EditorViewState extends State<EditorView> {
   /// and Markdown-encoded.
   void _insertTabIndent() {
     final QuillController? controller = _controller;
-    if (controller == null) return;
+    if (controller == null || controller.readOnly) return;
 
     final TextSelection selection = controller.selection;
     if (!selection.isValid) return;

@@ -82,6 +82,8 @@ class _ProjectSidebarViewState extends State<ProjectSidebarView> {
   /// identified by [id]. Revealing a tile hides any previously revealed one
   /// (only one tile shows its controls at a time).
   void _toggleRevealed(String id) {
+    // Rename/delete controls never appear in a read-only guide.
+    if (context.read<ProjectWorkspaceState>().isReadOnly) return;
     setState(() => _revealedId = _revealedId == id ? null : id);
   }
 
@@ -282,6 +284,10 @@ class _ProjectSidebarViewState extends State<ProjectSidebarView> {
             ],
           ),
           const SizedBox(height: AppSpacing.md),
+          // Built-in guides are read-only: no create buttons, just a note.
+          if (state.isReadOnly)
+            _buildReadOnlyNote(context)
+          else
           Row(
             children: <Widget>[
               // Req 7.1: create a folder in the Active_Project.
@@ -311,6 +317,39 @@ class _ProjectSidebarViewState extends State<ProjectSidebarView> {
                 ),
               ),
             ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// The note shown instead of the create buttons in a read-only guide.
+  Widget _buildReadOnlyNote(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.md,
+        vertical: AppSpacing.sm,
+      ),
+      decoration: BoxDecoration(
+        color: AppPalette.surfaceVariant,
+        borderRadius: AppStyle.controlRadius,
+        border: Border.all(color: AppPalette.hairline),
+      ),
+      child: Row(
+        children: <Widget>[
+          const Icon(
+            Icons.menu_book_outlined,
+            size: 18,
+            color: AppPalette.secondary,
+          ),
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: Text(
+              'Built-in guide · read-only',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: AppPalette.textSecondary,
+                  ),
+            ),
           ),
         ],
       ),
@@ -511,6 +550,10 @@ class _ProjectSidebarViewState extends State<ProjectSidebarView> {
   /// A drag handle that starts a reorder of the item at [index] within its
   /// enclosing reorderable list.
   Widget _buildDragHandle(int index, {bool topAligned = false}) {
+    // Read-only guides cannot be reordered: keep the indent, drop the handle.
+    if (context.read<ProjectWorkspaceState>().isReadOnly) {
+      return const SizedBox(width: 24);
+    }
     return ReorderableDragStartListener(
       index: index,
       child: Padding(
@@ -535,7 +578,7 @@ class _ProjectSidebarViewState extends State<ProjectSidebarView> {
   ) {
     // While renaming, do not make the row draggable — the inline field needs
     // normal pointer handling.
-    if (_renamingId == doc.id) {
+    if (_renamingId == doc.id || state.isReadOnly) {
       return _buildDocumentRow(context, state, doc);
     }
 

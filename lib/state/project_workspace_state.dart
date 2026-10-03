@@ -192,11 +192,17 @@ class ProjectWorkspaceState extends ChangeNotifier {
     this._documentRepo, {
     AutosaveDebouncer? autosaveDebouncer,
     MarkdownDocumentCodec? codec,
+    this.isReadOnly = false,
   })  : _autosaveDebouncer = autosaveDebouncer ?? AutosaveDebouncer(),
         _codec = codec ?? MarkdownDocumentCodec();
 
   /// The Active_Project this workspace is scoped to (Req 5.1).
   Project get project => _project;
+
+  /// Whether this project can only be read (the built-in guides). Every
+  /// mutating method is a no-op, and the sidebar and editor hide their
+  /// editing controls.
+  final bool isReadOnly;
 
   /// The Delta <-> Markdown codec this workspace uses. Exposed so the Editor
   /// can render an Active_Document's stored Markdown into a fresh Quill
@@ -277,6 +283,7 @@ class ProjectWorkspaceState extends ChangeNotifier {
   /// both folders and documents so they share one ordering, and both kinds are
   /// persisted transactionally. A no-op move does nothing.
   Future<void> reorderRootItems(int oldIndex, int newIndex) async {
+    if (isReadOnly) return; // Built-in guides are read-only.
     final List<RootItem> ordered = rootItems();
     if (oldIndex < 0 || oldIndex >= ordered.length) return;
     final int target = _normalizeReorderIndex(oldIndex, newIndex, ordered.length);
@@ -342,6 +349,7 @@ class ProjectWorkspaceState extends ChangeNotifier {
     int oldIndex,
     int newIndex,
   ) async {
+    if (isReadOnly) return; // Built-in guides are read-only.
     await _reorderDocumentsInContainer(folderId, oldIndex, newIndex);
   }
 
@@ -388,6 +396,7 @@ class ProjectWorkspaceState extends ChangeNotifier {
     String? targetFolderId,
     int targetIndex,
   ) async {
+    if (isReadOnly) return; // Built-in guides are read-only.
     final int srcIndex = _documents.indexWhere((Document d) => d.id == docId);
     if (srcIndex == -1) return;
     final Document doc = _documents[srcIndex];
@@ -774,6 +783,7 @@ class ProjectWorkspaceState extends ChangeNotifier {
   /// displayed folders are retained and a recoverable error is surfaced
   /// (Req 7.6). Listeners are always notified.
   Future<void> createFolder(String name) async {
+    if (isReadOnly) return; // Built-in guides are read-only.
     final String trimmed = name.trim();
     if (trimmed.isEmpty) {
       // Req 7.3: a name is required.
@@ -825,6 +835,7 @@ class ProjectWorkspaceState extends ChangeNotifier {
   /// repository failure the previous name and timestamp are retained and a
   /// recoverable error is surfaced (Req 8.7). Listeners are always notified.
   Future<void> renameFolder(String id, String name) async {
+    if (isReadOnly) return; // Built-in guides are read-only.
     final String trimmed = name.trim();
     if (trimmed.isEmpty) {
       // Req 8.3: a name is required; retain the existing folder.
@@ -887,6 +898,7 @@ class ProjectWorkspaceState extends ChangeNotifier {
   /// document, expansion) and a recoverable error is surfaced (Req 9.4).
   /// Listeners are always notified.
   Future<void> deleteFolder(String id) async {
+    if (isReadOnly) return; // Built-in guides are read-only.
     try {
       // Req 9.2: remove the folder and its documents transactionally.
       await _folderRepo.deleteCascade(id);
@@ -958,6 +970,7 @@ class ProjectWorkspaceState extends ChangeNotifier {
   /// existing documents are retained unchanged and a recoverable error is
   /// surfaced (Req 10.7). Listeners are always notified.
   Future<void> createDocument({String? folderId}) async {
+    if (isReadOnly) return; // Built-in guides are read-only.
     // Persist the outgoing document's pending edit before the new one becomes
     // active (see [selectDocument]).
     await saveNow();
@@ -1056,6 +1069,7 @@ class ProjectWorkspaceState extends ChangeNotifier {
   /// On a repository failure the previous title and timestamp are retained and
   /// a recoverable error is surfaced. Listeners are always notified.
   Future<void> renameDocument(String id, String title) async {
+    if (isReadOnly) return; // Built-in guides are read-only.
     final String trimmed = title.trim();
     if (trimmed.isEmpty) {
       // Req 12.3: a title is required; retain the existing document.
@@ -1114,6 +1128,7 @@ class ProjectWorkspaceState extends ChangeNotifier {
   /// On a repository failure the document is retained unchanged and a
   /// recoverable error is surfaced (Req 13.3). Listeners are always notified.
   Future<void> deleteDocument(String id) async {
+    if (isReadOnly) return; // Built-in guides are read-only.
     try {
       // Req 13.2: remove the document and its content from the store.
       await _documentRepo.delete(id);
@@ -1173,6 +1188,7 @@ class ProjectWorkspaceState extends ChangeNotifier {
   /// Content is kept, the next edit reschedules the save and the change is
   /// retried naturally (Req 16.2, 16.3).
   void onContentChanged(Delta delta) {
+    if (isReadOnly) return; // Built-in guides are read-only.
     // No Active_Document: nothing to edit.
     if (_activeDocument == null) return;
 

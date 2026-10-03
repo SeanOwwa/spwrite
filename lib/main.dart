@@ -45,6 +45,7 @@ import 'data/ai/project_indexer.dart';
 import 'data/ai/retrieval_budget.dart';
 import 'data/ai/semantic_context_retriever.dart';
 import 'data/database_provider.dart';
+import 'data/guides/guide_installer.dart';
 import 'data/observable_repositories.dart';
 import 'data/sqlite_ai_conversation_repository.dart';
 import 'data/sqlite_app_settings_repository.dart';
@@ -60,6 +61,9 @@ import 'domain/app_settings_repository.dart';
 import 'domain/character_repository.dart';
 import 'domain/document_repository.dart';
 import 'domain/folder_repository.dart';
+import 'domain/guides/built_in_guide.dart';
+import 'domain/guides/developer_guide.dart';
+import 'domain/guides/user_guide.dart';
 import 'domain/project.dart';
 import 'domain/project_repository.dart';
 import 'presentation/dashboard_view.dart';
@@ -69,6 +73,7 @@ import 'presentation/project_sidebar_view.dart';
 import 'state/ai_assistant_state.dart';
 import 'state/app_navigation_state.dart';
 import 'state/character_panel_state.dart';
+import 'state/guide_visibility_state.dart';
 import 'state/indexing_binding.dart';
 import 'state/indexing_state.dart';
 import 'state/load_status.dart';
@@ -171,6 +176,23 @@ Future<void> main() async {
       ObservableCharacterRepository(SqliteCharacterRepository(db));
   final DocumentRepository documentRepository = observableDocuments;
   final CharacterRepository characterRepository = observableCharacters;
+
+  // Built-in guide projects (User Guide, Developer Guide). Installed before the
+  // first project-list load, and rewritten only when a new app version ships
+  // changed guide content. A failure never blocks startup.
+  const BuiltInGuideCatalog builtInGuides = BuiltInGuideCatalog(
+    <BuiltInGuide>[UserGuide(), DeveloperGuide()],
+  );
+  await GuideInstaller(
+    projects: projectRepository,
+    folders: folderRepository,
+    documents: documentRepository,
+    settings: appSettingsRepository,
+  ).installAll(
+    builtInGuides,
+    onError: (BuiltInGuide guide, Object error) =>
+        debugPrint('Installing "${guide.name}" failed: $error'),
+  );
 
   // Construct the app-lifetime AI collaborators near the other repositories
   // (design §10). The downloader (one-time Model Asset fetch + verify + cache)
@@ -329,6 +351,8 @@ Future<void> main() async {
         project,
         folderRepository,
         documentRepository,
+        // The built-in guides open read-only.
+        isReadOnly: builtInGuides.isBuiltIn(project.id),
       );
       // Req 5.2: load the opened project's folders and documents. Fire-and-
       // forget so opening a project stays responsive; the Sidebar observes the
@@ -336,13 +360,21 @@ Future<void> main() async {
       workspace.loadContents();
       return workspace;
     },
+    // Guides can be opened but never deleted or renamed.
+    builtInPolicy: builtInGuides,
   );
+
+  // The dashboard's "Guides" switch, restored from the saved choice.
+  final GuideVisibilityState guideVisibility = GuideVisibilityState(
+    SettingsGuideVisibilityPreference(appSettingsRepository),
+  )..load();
 
   runApp(SpwriteApp(
     appState: appState,
     characterRepository: characterRepository,
     aiProjectFactories: aiProjectFactories,
     appSettingsRepository: appSettingsRepository,
+    guideVisibility: guideVisibility,
   ));
 
   // Trigger the initial project-list load after startup (Req 1.1, 17.5).
@@ -378,12 +410,17 @@ class SpwriteApp extends StatelessWidget {
   /// tree so the Export dialog can read and persist them.
   final AppSettingsRepository appSettingsRepository;
 
+  /// The dashboard's "Guides" show/hide switch. Optional so tests can build
+  /// the app without it (guides then stay visible).
+  final GuideVisibilityState? guideVisibility;
+
   const SpwriteApp({
     super.key,
     required this.appState,
     required this.characterRepository,
     required this.aiProjectFactories,
     required this.appSettingsRepository,
+    this.guideVisibility,
   });
 
   @override
@@ -394,6 +431,9 @@ class SpwriteApp extends StatelessWidget {
         Provider<CharacterRepository>.value(value: characterRepository),
         Provider<AiProjectFactories>.value(value: aiProjectFactories),
         Provider<AppSettingsRepository>.value(value: appSettingsRepository),
+        ChangeNotifierProvider<GuideVisibilityState?>.value(
+          value: guideVisibility,
+        ),
       ],
       child: MaterialApp(
         title: 'Spwrite',

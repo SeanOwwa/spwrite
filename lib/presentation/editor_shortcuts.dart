@@ -121,6 +121,7 @@ const List<CharacterShortcutEvent> typingShortcutEvents =
 /// (the typed `-` is then not inserted). Returns `false`, leaving the hyphen
 /// to be typed normally, in every other case, including a range selection.
 bool applyEmDash(QuillController controller) {
+  if (controller.readOnly) return false;
   final TextSelection selection = controller.selection;
   if (!selection.isValid || !selection.isCollapsed) return false;
   final int caret = selection.baseOffset;

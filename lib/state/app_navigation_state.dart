@@ -22,6 +22,7 @@ library;
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 
+import '../domain/guides/built_in_guide.dart';
 import '../domain/project.dart';
 import '../domain/project_repository.dart';
 import 'load_status.dart';
@@ -78,9 +79,32 @@ class AppNavigationState extends ChangeNotifier {
     ProjectRepository repository,
     WorkspaceFactory workspaceFactory, {
     Uuid? uuid,
+    BuiltInProjectPolicy? builtInPolicy,
   })  : _repository = repository,
         _workspaceFactory = workspaceFactory,
-        _uuid = uuid ?? const Uuid();
+        _uuid = uuid ?? const Uuid(),
+        _builtIn = builtInPolicy;
+
+  /// Identifies built-in guide projects, which can be opened but never
+  /// deleted, renamed, or re-covered. `null` means there are none.
+  final BuiltInProjectPolicy? _builtIn;
+
+  /// Whether [projectId] is a built-in guide project.
+  bool isBuiltIn(String projectId) => _builtIn?.isBuiltIn(projectId) ?? false;
+
+  /// The built-in guide projects, in their fixed dashboard order.
+  List<Project> get builtInProjects {
+    final BuiltInProjectPolicy? policy = _builtIn;
+    if (policy == null) return const <Project>[];
+    return _projects.where((Project p) => policy.isBuiltIn(p.id)).toList()
+      ..sort((Project a, Project b) =>
+          policy.orderOf(a.id).compareTo(policy.orderOf(b.id)));
+  }
+
+  /// The writer's own projects (everything except the guides), in the usual
+  /// last-edited order.
+  List<Project> get userProjects =>
+      _projects.where((Project p) => !isBuiltIn(p.id)).toList();
 
   /// The ordered project list for the Dashboard (Req 1.2, 1.4). Returned as an
   /// unmodifiable view so listeners cannot mutate the backing store.
@@ -284,6 +308,9 @@ class AppNavigationState extends ChangeNotifier {
     Project Function(Project current, String trimmedName, DateTime now) apply, {
     required String failureMessage,
   }) async {
+    // Built-in guides keep the name and cover they ship with.
+    if (isBuiltIn(id)) return;
+
     final String trimmed = name.trim();
 
     // Req 3.3: empty / whitespace-only name — retain name and timestamp.
@@ -338,6 +365,8 @@ class AppNavigationState extends ChangeNotifier {
   /// On failure the project is retained unchanged and a [transientError] is
   /// surfaced (Req 4.4).
   Future<void> deleteProject(String id) async {
+    // Built-in guides cannot be deleted (they can be hidden instead).
+    if (isBuiltIn(id)) return;
     try {
       await _repository.deleteCascade(id);
       final bool wasActive = _activeProject?.id == id;

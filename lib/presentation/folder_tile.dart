@@ -211,6 +211,8 @@ class FolderTile extends StatelessWidget {
     BuildContext context,
     ProjectWorkspaceState state,
   ) {
+    // Read-only guides have no folder controls.
+    if (state.isReadOnly) return const SizedBox.shrink();
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: <Widget>[

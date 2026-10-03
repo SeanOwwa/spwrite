@@ -62,12 +62,16 @@ class ProjectCard extends StatefulWidget {
   /// control is hidden.
   final VoidCallback? onDelete;
 
+  /// Replaces the "Edited (date)" line, e.g. "Built-in guide" for the guides.
+  final String? caption;
+
   const ProjectCard({
     super.key,
     required this.project,
     this.onOpen,
     this.onRename,
     this.onDelete,
+    this.caption,
   });
 
   @override
@@ -155,7 +159,8 @@ class _ProjectCardState extends State<ProjectCard> {
                                 ),
                                 const SizedBox(height: AppSpacing.xxs),
                                 Text(
-                                  'Edited ${formatProjectDate(project.modifiedAt)}',
+                                  widget.caption ??
+                                      'Edited ${formatProjectDate(project.modifiedAt)}',
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                   style: text.bodySmall,
