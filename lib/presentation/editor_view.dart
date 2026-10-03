@@ -1032,5 +1032,23 @@ class _EditorViewState extends State<EditorView> {
       null,
       null,
     ),
+    // The bullet (•) and number (1.) markers. flutter_quill draws them with
+    // this separate style, top-aligned beside the line. Left at its default
+    // (system font, ~1.2 line height) the marker sat above the double-spaced
+    // serif text, so it must match the list text's font, size and height.
+    leading: DefaultTextBlockStyle(
+      TextStyle(
+        fontFamily: _serifFamily,
+        fontFamilyFallback: _serifFallback,
+        fontSize: _bodyFontSize,
+        height: _lineHeight,
+        color: AppPalette.textPrimary,
+        decoration: TextDecoration.none,
+      ),
+      HorizontalSpacing(0, 0),
+      VerticalSpacing(0, 0),
+      VerticalSpacing(0, 0),
+      null,
+    ),
   );
 }
