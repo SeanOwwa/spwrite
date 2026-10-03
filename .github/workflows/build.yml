@@ -11,7 +11,8 @@
 #   - Build and update the website: same, but tick "Publish to the website".
 #   - Release: push a version tag, e.g.
 #       git tag v1.3.5 && git push origin v1.3.5
-#     The apps are attached to a GitHub Release AND published to the website.
+#     The apps are attached to a GitHub Release AND published to the website,
+#     together with that version's release notes from CHANGELOG.md.
 #
 # Publishing needs a repository secret named SPWRITE_WEB_TOKEN: a fine-grained
 # personal access token with "Contents: Read and write" on SeanOwwa/spwrite.web.
@@ -199,21 +200,22 @@ jobs:
         with:
           path: builds
           merge-multiple: true
-      - name: Copy the builds and update the download pages
+      - name: Copy the builds, update the download pages and the changelog
         run: |
           version=$(sed -nE 's/^version:[[:space:]]*([^+]+).*/\1/p' app/pubspec.yaml)
           echo "Publishing version $version"
-          python3 app/scripts/publish_website.py --site site --builds builds --version "$version"
+          python3 app/scripts/publish_website.py --site site --builds builds \
+            --changelog app/CHANGELOG.md --version "$version"
           echo "VERSION=$version" >> "$GITHUB_ENV"
       - name: Commit and push to spwrite.web
         working-directory: site
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A downloads update/release.json ./*.html
+          git add -A downloads update ./*.html
           if git diff --cached --quiet; then
             echo "The website already has these builds."
             exit 0
           fi
-          git commit -m "Publish Spwrite Beta v$VERSION downloads"
+          git commit -m "Publish Spwrite Beta v$VERSION (downloads and release notes)"
           git push
