@@ -1,0 +1,139 @@
+# Builds Spwrite for macOS, Windows and Linux at the same time on GitHub's
+# machines (each desktop app must be built on its own operating system).
+#
+# How to use:
+#   - Any time: GitHub > Actions > "Build desktop apps" > Run workflow.
+#     The three apps appear as downloadable artifacts on the run's page.
+#   - For a release: push a version tag, e.g.
+#       git tag v1.3.5 && git push origin v1.3.5
+#     The apps are built and attached to a GitHub Release for that tag.
+
+name: Build desktop apps
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+env:
+  # Keep in step with the Flutter version used for local builds.
+  FLUTTER_VERSION: "3.47.5"
+
+jobs:
+  test:
+    name: Analyze and test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+      - run: flutter pub get
+      - run: flutter analyze
+      - run: flutter test
+
+  macos:
+    name: macOS app
+    needs: test
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+      - run: flutter pub get
+      - run: flutter build macos --release
+      - name: Zip the app
+        # ditto keeps the .app bundle's structure and permissions intact.
+        run: |
+          cd build/macos/Build/Products/Release
+          ditto -c -k --keepParent Spwrite.app "$GITHUB_WORKSPACE/Spwrite-macos.zip"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Spwrite-macos
+          path: Spwrite-macos.zip
+
+  windows:
+    name: Windows app
+    needs: test
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+      - run: flutter pub get
+      - run: flutter build windows --release
+      - name: Zip the Release folder
+        # The whole folder is the app: spwrite.exe needs the files beside it
+        # (including the bundled Visual C++ runtime DLLs).
+        shell: pwsh
+        run: |
+          $release = Get-ChildItem -Path build/windows -Recurse -Directory -Filter Release |
+            Where-Object { Test-Path (Join-Path $_.FullName 'spwrite.exe') } |
+            Select-Object -First 1
+          if (-not $release) { throw 'spwrite.exe was not found in the build output.' }
+          Compress-Archive -Path "$($release.FullName)\*" -DestinationPath Spwrite-windows.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Spwrite-windows
+          path: Spwrite-windows.zip
+
+  linux:
+    name: Linux app
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install the Linux build tools
+        # Same packages scripts/install.sh installs on apt systems. GCC
+        # (build-essential) is needed to compile the bundled llama.cpp runtime.
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential clang cmake ninja-build \
+            pkg-config libgtk-3-dev liblzma-dev libsqlite3-dev \
+            libsecret-1-dev libglu1-mesa
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+      - run: flutter pub get
+      - run: flutter build linux --release
+      - name: Pack the app folder
+        # The bundle folder is the app: run ./spwrite inside it.
+        run: |
+          tar -czf Spwrite-linux-x64.tar.gz -C build/linux/x64/release bundle
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Spwrite-linux
+          path: Spwrite-linux-x64.tar.gz
+
+  release:
+    name: Attach apps to the GitHub Release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [macos, windows, linux]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          name: Spwrite ${{ github.ref_name }} (Beta)
+          prerelease: true
+          generate_release_notes: true
+          files: dist/*
