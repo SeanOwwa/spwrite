@@ -73,6 +73,11 @@ class EditorView extends StatefulWidget {
 
   const EditorView({super.key, this.onRenameRequested});
 
+  /// The page's top and bottom margin: one inch. Flutter lays out in logical
+  /// pixels at about 96 per inch, the same on-screen scale word processors use
+  /// for page margins.
+  static const double pageMarginVertical = 96;
+
   @override
   State<EditorView> createState() => _EditorViewState();
 }
@@ -824,17 +829,15 @@ class _EditorViewState extends State<EditorView> {
         final double side = constraints.maxWidth > measure + 2 * AppSpacing.xl
             ? (constraints.maxWidth - measure) / 2
             : AppSpacing.xl;
-        // Generous bottom padding lets the last lines be scrolled up to eye
-        // level instead of being pinned to the bottom edge of the window.
-        final double bottom = constraints.maxHeight.isFinite
-            ? constraints.maxHeight * 0.4
-            : AppSpacing.xxl;
+        // A 1-inch top and bottom margin, like a manuscript page. The bottom
+        // margin is fixed (not a share of the window height), so the page only
+        // scrolls as far as the text plus its margins actually needs.
         return _buildQuillEditor(
           EdgeInsets.fromLTRB(
             side,
-            focusMode ? AppSpacing.xxl : AppSpacing.lg,
+            EditorView.pageMarginVertical,
             side,
-            bottom,
+            EditorView.pageMarginVertical,
           ),
           focusMode: focusMode,
         );

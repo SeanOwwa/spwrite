@@ -194,8 +194,7 @@ Future<void> _pumpTile(
           value: state,
           // Consume the state so the tile rebuilds on notifyListeners, mirroring
           // how the real ProjectSidebarView watches the workspace and rebuilds
-          // the tree (FolderTile itself takes the state as a parameter because
-          // it is rendered inside a ReorderableListView overlay in production).
+          // the tree (FolderTile itself takes the state as a parameter).
           child: SingleChildScrollView(
             child: Consumer<ProjectWorkspaceState>(
               builder: (BuildContext context, ProjectWorkspaceState s, _) =>
@@ -208,7 +207,6 @@ Future<void> _pumpTile(
                 renameField: renameField,
                 onRename: onRename ?? () {},
                 onDelete: onDelete ?? () {},
-                onReorderDocuments: (int oldIndex, int newIndex) {},
                 documentRowBuilder:
                     (BuildContext context, Document doc, int index) =>
                         DocumentListItem(

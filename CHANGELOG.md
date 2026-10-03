@@ -4,7 +4,35 @@ All notable changes to Spwrite are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses
 [Semantic Versioning](https://semver.org/).
 
-## [1.3.5] (Beta) - Unreleased
+## [1.3.6] (Beta) - 2026-10-03
+
+### Changed
+
+- **Drag folders and documents by the row itself.** The separate drag handle
+  is gone: press anywhere on a folder or document in the sidebar and drag it.
+  A line shows where it will land (above or below a row), and a folder lights
+  up when a document will drop into it. Tapping and long-pressing a row work
+  as before.
+- **Documents can be dragged back out of a folder.** Drop a folder's document
+  between top-level rows, or in the empty space below the list, to move it to
+  the top level of the project. Documents can also be dragged from one folder
+  straight into another, and reordered inside a folder.
+- **1-inch top and bottom margins on the page**, in normal and focus mode.
+
+### Fixed
+
+- **The page scrolled further than the text.** The extra space below the text
+  grew with the window height, so even short documents could scroll into
+  empty space. The page now scrolls only as far as the text and its bottom
+  margin.
+- **macOS said "Apple could not verify Spwrite is free of malware" and
+  wouldn't open it.** The Mac build is now signed with a Developer ID,
+  hardened and notarized by Apple, so macOS recognizes it and opens it
+  normally. This needs the Apple signing secrets set up in the build
+  workflow; without them the build is ad-hoc signed and the run warns that it
+  isn't notarized.
+
+## [1.3.5] (Beta) - 2026-10-03
 
 ### Changed
 
@@ -22,7 +50,7 @@ All notable changes to Spwrite are recorded here. The format follows
   took priority, so Esc only worked when the cursor wasn't in the page. Esc now
   leaves focus mode wherever the cursor is.
 
-## [1.3.4] (Beta) - Unreleased
+## [1.3.4] (Beta) - 2026-10-02
 
 ### Added
 
@@ -68,7 +96,7 @@ All notable changes to Spwrite are recorded here. The format follows
   strikethrough, inline code, quote, checklist, indent, image). These are now
   turned off.
 
-## [1.2.3] (Beta) - Unreleased
+## [1.2.3] (Beta) - 2026-10-02
 
 ### Fixed
 
@@ -120,7 +148,7 @@ All notable changes to Spwrite are recorded here. The format follows
   VM exposes, and on enough memory (8 GB recommended). Writing, editing and
   keyword search are unaffected.
 
-## [1.2.2] (Beta) - Unreleased
+## [1.2.2] (Beta) - 2026-10-01
 
 ### Added
 
@@ -149,7 +177,7 @@ All notable changes to Spwrite are recorded here. The format follows
   (used for the remembered export folder). The upgrade only creates the table;
   existing projects, documents, characters, and conversations are untouched.
 
-## [1.2.1] (Beta) - Unreleased
+## [1.2.1] (Beta) - 2026-10-01
 
 Covers everything since commit `548d0a4` ("Fix Mac Errors").
 

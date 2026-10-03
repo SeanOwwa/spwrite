@@ -13,9 +13,9 @@ class AppInfo {
   static const String channel = 'Beta';
 
   /// The semantic version number, matching `pubspec.yaml`'s `version:`.
-  static const String versionNumber = '1.3.5';
+  static const String versionNumber = '1.3.6';
 
-  /// The full, display-ready version label, e.g. `Beta 1.3.5`.
+  /// The full, display-ready version label, e.g. `Beta 1.3.6`.
   static const String version = '$channel $versionNumber';
 
   /// Whether the AI assistant is available in this build.

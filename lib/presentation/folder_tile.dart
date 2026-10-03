@@ -63,16 +63,16 @@ class FolderTile extends StatelessWidget {
 
   /// Builds the row widget for a Document contained in this Folder at [index]
   /// (its position in the folder's ordered list), so the parent can render a
-  /// reorderable, draggable row (or an inline rename field for the Document
-  /// currently being renamed) — keeping document behaviour identical to
-  /// root-level documents. The returned widget must carry a unique [Key] for
-  /// the reorderable list.
+  /// draggable row (or an inline rename field for the Document currently being
+  /// renamed) — keeping document behaviour identical to root-level documents.
+  /// The returned widget should carry a unique [Key].
   final Widget Function(BuildContext context, Document document, int index)
       documentRowBuilder;
 
-  /// Reorders the documents inside this folder: moves the document at
-  /// [oldIndex] to [newIndex] within the folder's ordered list.
-  final void Function(int oldIndex, int newIndex) onReorderDocuments;
+  /// Optionally wraps the folder's header row, so the parent can make the row
+  /// itself draggable and a drop target (drag & drop lives in the sidebar).
+  /// Only the header is wrapped; the expanded contents are not.
+  final Widget Function(BuildContext context, Widget header)? headerBuilder;
 
   /// Whether this folder's rename / delete controls are revealed. They are
   /// hidden by default and shown after a long-press on the folder row (Req v3).
@@ -83,10 +83,7 @@ class FolderTile extends StatelessWidget {
 
   /// The workspace state, passed in from the parent Project_Sidebar rather than
   /// read via `context.watch`. The sidebar already watches the state and
-  /// rebuilds this tile when it changes; passing it explicitly is also required
-  /// because a [ReorderableListView] builds its items under an internal overlay
-  /// whose `BuildContext` is not a descendant of the workspace provider, so
-  /// looking the provider up here would throw a `ProviderNotFoundException`.
+  /// rebuilds this tile when it changes, so the tile does not subscribe twice.
   final ProjectWorkspaceState state;
 
   const FolderTile({
@@ -95,23 +92,24 @@ class FolderTile extends StatelessWidget {
     required this.onRename,
     required this.onDelete,
     required this.documentRowBuilder,
-    required this.onReorderDocuments,
     required this.state,
     required this.controlsRevealed,
     required this.onLongPress,
     this.isRenaming = false,
     this.renameField,
+    this.headerBuilder,
   });
 
   @override
   Widget build(BuildContext context) {
     final bool expanded = state.isExpanded(folder.id);
+    final Widget header = _buildFolderRow(context, state, expanded);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
       children: <Widget>[
-        _buildFolderRow(context, state, expanded),
+        headerBuilder?.call(context, header) ?? header,
         // Revealed contents when expanded (Req 6.4); hidden when collapsed
         // (Req 6.5).
         if (expanded) _buildContents(context, state),
@@ -278,15 +276,12 @@ class FolderTile extends StatelessWidget {
     }
 
     // Req 6.4: reveal the folder's ordered documents, indented beneath the
-    // folder row. A ReorderableListView lets the user drag documents into a new
-    // order within the folder; the parent supplies each draggable row.
+    // folder row. The parent supplies each row, which is itself draggable.
     return Padding(
       padding: const EdgeInsets.only(left: 24),
-      child: ReorderableListView(
-        shrinkWrap: true,
-        physics: const NeverScrollableScrollPhysics(),
-        buildDefaultDragHandles: false,
-        onReorderItem: onReorderDocuments,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
         children: <Widget>[
           for (int i = 0; i < documents.length; i++)
             documentRowBuilder(context, documents[i], i),

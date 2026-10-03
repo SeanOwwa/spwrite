@@ -11,7 +11,7 @@
 #     The four zips appear as artifacts on the run's page.
 #   - Build and update the website: same, but tick "Publish to the website".
 #   - Release: push a version tag, e.g.
-#       git tag v1.3.5 && git push origin v1.3.5
+#       git tag v1.3.6 && git push origin v1.3.6
 #     The apps are attached to a GitHub Release AND published to the website,
 #     together with that version's release notes from CHANGELOG.md.
 #
@@ -66,11 +66,24 @@ jobs:
           cache: true
       - run: flutter pub get
       - run: flutter build macos --release
-      - name: Zip the app
-        # ditto keeps the .app bundle's structure and permissions intact.
+      - name: Sign, notarize and zip the app
+        # macOS blocks downloaded apps it can't verify ("Apple could not
+        # verify Spwrite is free of malware"). With the secrets below the app
+        # is signed with a Developer ID, notarized by Apple and stapled, so it
+        # opens normally. Without them it is only ad-hoc signed (a warning is
+        # shown on the run and users must choose Open Anyway).
+        #   MACOS_CERTIFICATE           base64 of the Developer ID Application .p12
+        #   MACOS_CERTIFICATE_PASSWORD  its password
+        #   APPLE_ID, APPLE_TEAM_ID, APPLE_APP_PASSWORD (app-specific password)
+        env:
+          MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
         run: |
-          cd build/macos/Build/Products/Release
-          ditto -c -k --keepParent Spwrite.app "$GITHUB_WORKSPACE/Spwrite-macos.zip"
+          bash scripts/macos_sign.sh build/macos/Build/Products/Release/Spwrite.app \
+            "$GITHUB_WORKSPACE/Spwrite-macos.zip"
       - uses: actions/upload-artifact@v4
         with:
           name: Spwrite-macos

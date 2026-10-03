@@ -173,9 +173,9 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(AppInfo.version, 'Beta 1.3.5');
-    expect(find.text('Beta 1.3.5'), findsOneWidget);
-    expect(find.bySemanticsLabel('Version Beta 1.3.5'), findsOneWidget);
+    expect(AppInfo.version, 'Beta 1.3.6');
+    expect(find.text('Beta 1.3.6'), findsOneWidget);
+    expect(find.bySemanticsLabel('Version Beta 1.3.6'), findsOneWidget);
     final Text label = tester
         .widget<Text>(find.byKey(const ValueKey<String>('app-version-label')));
     expect(label.style?.color, AppPalette.textSecondary);

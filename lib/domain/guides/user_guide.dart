@@ -113,9 +113,10 @@ Long-press (or press and hold) a folder or document to show its pencil and bin b
 
 ## Reorder and move
 
-- Drag the handle on the left of a row to change the order.
-- Drag a document onto a folder to move it into that folder.
-- Drag a document out of a folder onto the top-level list to move it back out.
+- Press anywhere on a folder or document and drag it. A line shows where it will land.
+- Drop it on the top or bottom half of another row to place it above or below that row.
+- Drop a document on a folder to move it into that folder.
+- To move a document out of a folder, drop it between top-level rows, or in the empty space below the list.
 
 ## Rename the open document
 
@@ -125,7 +126,7 @@ Click its title at the top of the editor.
 const String _writing = r'''
 # Writing and formatting
 
-Click a document in the sidebar and start typing. The page uses a book typeface with double line spacing, like a manuscript.
+Click a document in the sidebar and start typing. The page uses a book typeface with double line spacing and 1-inch top and bottom margins, like a manuscript.
 
 ## Formatting you can use
 

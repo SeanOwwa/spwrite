@@ -232,13 +232,17 @@ def publish_changelog(
         else {"versions": []}
     )
     versions: list[dict] = index.setdefault("versions", [])
+    before = json.dumps(index, sort_keys=True)
     label = f"Beta v{version}"
     entry = next((v for v in versions if v.get("file") == notes.name), None)
     if entry is None:
         entry = {"version": label, "date": date, "file": notes.name}
         versions.insert(0, entry)
         summary.append(f"added {label} to update/versions.json")
-    before = json.dumps(index, sort_keys=True)
+    elif entry.get("date") != date:
+        # The release date is the day it is published (today by default).
+        summary.append(f"dated {label} {date} (was {entry.get('date')})")
+        entry["date"] = date
     # Only the newest version carries the "Latest" pill.
     for v in versions:
         if v is not entry:

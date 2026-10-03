@@ -1,6 +1,6 @@
 # Spwrite
 
-**Beta 1.3.5** · macOS, Windows and Linux
+**Beta 1.3.6** · macOS, Windows and Linux
 
 Spwrite is a calm writing app for long work: novels, scripts, essays and notes.
 It runs on your own computer, works offline, and keeps your writing private.
@@ -31,15 +31,15 @@ There's no account and nothing to pay.
   Add a cover photo if you like.
 - **Folders and documents** inside each project, for parts, chapters and
   scenes.
-- **Drag to reorder.** Drag a document onto a folder to move it in, or back out
-  to the top level.
+- **Drag to reorder.** Drag any folder or document by its row. Drop a document
+  onto a folder to move it in, or back out to the top level.
 - Rename and delete buttons stay hidden until you long-press a row, so the
   sidebar stays clean.
 
 ### Write comfortably
 
-- A manuscript-style page: book serif type, double line spacing, and a
-  comfortable line width.
+- A manuscript-style page: book serif type, double line spacing, 1-inch top
+  and bottom margins, and a comfortable line width.
 - **Formatting:** bold, italic, headings, numbered and bulleted lists, and
   links.
 - **Focus mode** hides everything except the page.
@@ -98,6 +98,16 @@ first run takes a few minutes; later runs are quick.
 
 When it finishes, the installer prints where your app is. Double-click it, or
 drag it to Applications (Mac).
+
+**Mac: "Apple could not verify Spwrite is free of malware".** Downloads from
+the website are signed and notarized by Apple when the release was built with
+the signing secrets (see `.github/workflows/build.yml`), and open normally. If
+you see this message on a build that isn't notarized, open **System Settings →
+Privacy & Security** and click **Open Anyway** next to Spwrite, or run:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/Spwrite.app
+```
 
 ### Windows
 

@@ -408,16 +408,21 @@ class _ProjectSidebarViewState extends State<ProjectSidebarView> {
     );
   }
 
-  /// The ordered tree body: a single interleaved, reorderable list of the
-  /// project's root items — folders and root-level documents share one order,
-  /// so a document can sit above, below, or between folders (Req v3, 6.1–6.4).
+  /// The ordered tree body: a single interleaved list of the project's root
+  /// items — folders and root-level documents share one order, so a document
+  /// can sit above, below, or between folders (Req v3, 6.1–6.4) — followed by
+  /// an open area at the bottom that is also a drop target.
   ///
-  /// Interactions:
-  ///   * the ⠿ drag handle reorders an item within the root list (a document
-  ///     can thus swap order with a folder);
-  ///   * dragging a document's body onto a folder moves it *into* that folder;
-  ///   * dragging a folder document's body onto the root list moves it *out*;
-  ///   * long-pressing a tile reveals its rename / delete controls.
+  /// Drag & drop: press anywhere on a folder or document row and drag it.
+  ///   * dropping on the top / bottom half of a row places the item before /
+  ///     after it, in that row's container (reorder, or move between the top
+  ///     level and a folder);
+  ///   * dropping a document on a folder row moves it *into* that folder;
+  ///   * dropping in the open area below the list moves the item to the end of
+  ///     the top level (the way out of a folder when nothing else is visible).
+  ///
+  /// Taps still select or expand, and long-press still reveals the rename /
+  /// delete controls: a drag only starts once the pointer moves.
   Widget _buildTree(
     BuildContext context,
     ProjectWorkspaceState state,
@@ -425,199 +430,327 @@ class _ProjectSidebarViewState extends State<ProjectSidebarView> {
     List<Document> rootDocuments,
   ) {
     final List<RootItem> items = state.rootItems();
-    return ReorderableListView.builder(
-      buildDefaultDragHandles: false,
-      padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
-      itemCount: items.length,
-      onReorderItem: (int oldIndex, int newIndex) =>
-          state.reorderRootItems(oldIndex, newIndex),
-      itemBuilder: (BuildContext context, int index) {
-        final RootItem item = items[index];
-        if (item.isFolder) {
-          return _buildFolderEntry(context, state, item.folder!, index);
-        }
-        return _buildRootDocumentEntry(context, state, item.document!, index);
-      },
+    return CustomScrollView(
+      slivers: <Widget>[
+        SliverPadding(
+          padding: const EdgeInsets.only(top: AppSpacing.sm),
+          sliver: SliverList.builder(
+            itemCount: items.length,
+            itemBuilder: (BuildContext context, int index) {
+              final RootItem item = items[index];
+              if (item.isFolder) {
+                return _buildFolderEntry(context, state, item.folder!, index);
+              }
+              return _buildRootDocumentEntry(
+                  context, state, item.document!, index);
+            },
+          ),
+        ),
+        SliverFillRemaining(
+          hasScrollBody: false,
+          child: _buildEndDropArea(state, items.length),
+        ),
+      ],
     );
   }
 
-  /// A folder row in the root list: a drag handle (reorder among root items), a
-  /// [DragTarget] that accepts a document dropped onto it (move into this
-  /// folder), and the [FolderTile] itself (which renders the folder's contents
-  /// and its own reorderable documents when expanded).
+  /// A folder entry in the root list: the [FolderTile] (header plus, when
+  /// expanded, its documents). The header row is draggable (moves the folder
+  /// among the root items) and accepts documents (drops them into the folder).
+  /// The whole entry also accepts a dragged folder, placing it before or after
+  /// this one.
   Widget _buildFolderEntry(
     BuildContext context,
     ProjectWorkspaceState state,
     Folder folder,
     int index,
   ) {
-    return DragTarget<Document>(
+    final SidebarDragItem self = SidebarDragItem.folder(folder);
+    return _SidebarDropZone(
       key: ValueKey<String>('root-folder-${folder.id}'),
-      onWillAcceptWithDetails: (DragTargetDetails<Document> details) =>
-          details.data.folderId != folder.id,
-      onAcceptWithDetails: (DragTargetDetails<Document> details) {
-        // Append the moved document to the end of the target folder.
-        final int end = state.documentsIn(folder.id).length;
-        state.moveDocument(details.data.id, folder.id, end);
-      },
-      builder: (
-        BuildContext context,
-        List<Document?> candidate,
-        List<dynamic> rejected,
-      ) {
-        final bool highlighted = candidate.isNotEmpty;
-        return Container(
-          decoration: highlighted
-              ? BoxDecoration(
-                  border: Border.all(color: AppPalette.primary, width: 2),
-                  borderRadius: BorderRadius.circular(6),
+      // Documents reach this outer zone only over the folder's open space
+      // (e.g. the "empty folder" note); there they drop into the folder.
+      placementFor: (SidebarDragItem item, double fraction) => item.isFolder
+          ? _halfPlacement(fraction)
+          : SidebarDropPlacement.inside,
+      onDrop: (SidebarDragItem item, SidebarDropPlacement placement) =>
+          _dropOnFolder(state, item, folder, index, placement),
+      child: _fadeWhileDragging(
+        self,
+        FolderTile(
+          folder: folder,
+          state: state,
+          controlsRevealed: _revealedId == folder.id,
+          onLongPress: () => _toggleRevealed(folder.id),
+          isRenaming: _renamingId == folder.id,
+          renameField: _renamingId == folder.id
+              ? NameField(
+                  initialValue: folder.name,
+                  onConfirm: (String newName) =>
+                      _confirmFolderRename(state, folder.id, newName),
+                  onCancel: _endRename,
                 )
               : null,
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              _buildDragHandle(index, topAligned: true),
-              Expanded(
-                child: FolderTile(
-                  folder: folder,
-                  state: state,
-                  controlsRevealed: _revealedId == folder.id,
-                  onLongPress: () => _toggleRevealed(folder.id),
-                  isRenaming: _renamingId == folder.id,
-                  renameField: _renamingId == folder.id
-                      ? NameField(
-                          initialValue: folder.name,
-                          onConfirm: (String newName) =>
-                              _confirmFolderRename(state, folder.id, newName),
-                          onCancel: _endRename,
-                        )
-                      : null,
-                  onRename: () => _beginRename(folder.id),
-                  onDelete: () =>
-                      _confirmDeleteFolder(context, state, folder),
-                  onReorderDocuments: (int oldIndex, int newIndex) =>
-                      state.reorderDocumentsInFolder(
-                          folder.id, oldIndex, newIndex),
-                  documentRowBuilder:
-                      (BuildContext context, Document doc, int docIndex) =>
-                          _buildFolderDocumentRow(
-                              context, state, doc, docIndex),
-                ),
-              ),
-            ],
+          onRename: () => _beginRename(folder.id),
+          onDelete: () => _confirmDeleteFolder(context, state, folder),
+          documentRowBuilder:
+              (BuildContext context, Document doc, int docIndex) =>
+                  _buildFolderDocumentRow(context, state, folder, doc, docIndex),
+          headerBuilder: (BuildContext context, Widget header) =>
+              _SidebarDropZone(
+            // The header takes documents: the top edge places the document
+            // above the folder at the top level, the rest drops it inside.
+            accepts: (SidebarDragItem item) => !item.isFolder,
+            placementFor: (SidebarDragItem item, double fraction) =>
+                fraction < 0.3
+                    ? SidebarDropPlacement.before
+                    : SidebarDropPlacement.inside,
+            onDrop: (SidebarDragItem item, SidebarDropPlacement placement) =>
+                _dropOnFolder(state, item, folder, index, placement),
+            child: _isDraggable(state, folder.id)
+                ? _draggable(
+                    context,
+                    item: self,
+                    icon: Icons.folder_outlined,
+                    label: folder.name,
+                    child: header,
+                  )
+                : header,
           ),
-        );
-      },
+        ),
+      ),
     );
   }
 
-  /// A root-level document row: a drag handle (reorder among root items) beside
-  /// the draggable, selectable document row. The document body is draggable so
-  /// it can be dropped onto a folder to move it in.
+  /// The open area below the root list. Dropping here moves the item to the
+  /// end of the top level, which is how a document leaves a folder when no
+  /// top-level row is in view.
+  Widget _buildEndDropArea(ProjectWorkspaceState state, int rootCount) {
+    return _SidebarDropZone(
+      key: const ValueKey<String>('sidebar-end-drop-area'),
+      placementFor: (SidebarDragItem item, double fraction) =>
+          SidebarDropPlacement.before,
+      onDrop: (SidebarDragItem item, SidebarDropPlacement placement) =>
+          _dropAtRoot(state, item, rootCount),
+      hoverHint: 'Move to the top level',
+      child: const SizedBox(height: 56),
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Drag & drop
+  // ---------------------------------------------------------------------------
+
+  /// The id of the folder or document being dragged, so its row can be dimmed
+  /// in place while its chip follows the pointer. `null` when nothing is.
+  String? _draggingId;
+
+  /// Scrolls the tree while a drag is held near its top or bottom edge.
+  EdgeDraggingAutoScroller? _autoScroller;
+
+  @override
+  void dispose() {
+    _autoScroller?.stopAutoScroll();
+    super.dispose();
+  }
+
+  /// Whether the row for [id] can be dragged: not in a read-only guide and not
+  /// while it is being renamed (the inline field needs normal pointer input).
+  bool _isDraggable(ProjectWorkspaceState state, String id) =>
+      !state.isReadOnly && _renamingId != id;
+
+  /// Before for the top half of a row, after for the bottom half.
+  static SidebarDropPlacement _halfPlacement(double fraction) => fraction < 0.5
+      ? SidebarDropPlacement.before
+      : SidebarDropPlacement.after;
+
+  /// Dims [child] while [item] is the one being dragged. The [Opacity] is
+  /// always present so the subtree (and the active [Draggable]) keeps its
+  /// element when the drag starts and ends.
+  Widget _fadeWhileDragging(SidebarDragItem item, Widget child) {
+    return Opacity(
+      opacity: _draggingId == item.id ? 0.4 : 1,
+      child: child,
+    );
+  }
+
+  /// Makes the whole [child] row draggable as [item]. Dragging starts once the
+  /// pointer moves, so taps and long-presses on the row keep working. The
+  /// floating feedback is a compact chip with [icon] and [label].
+  Widget _draggable(
+    BuildContext context, {
+    required SidebarDragItem item,
+    required IconData icon,
+    required String label,
+    required Widget child,
+  }) {
+    return Draggable<SidebarDragItem>(
+      data: item,
+      // The drop position is read from the pointer, so anchor the drag there.
+      dragAnchorStrategy: pointerDragAnchorStrategy,
+      feedback: _SidebarDragChip(icon: icon, label: label),
+      onDragStarted: () => setState(() => _draggingId = item.id),
+      onDragUpdate: (DragUpdateDetails details) =>
+          _autoScrollIfNeeded(context, details.globalPosition),
+      onDragEnd: (_) => _endDrag(),
+      child: child,
+    );
+  }
+
+  /// Starts (or keeps) scrolling the tree when the pointer nears its edge.
+  void _autoScrollIfNeeded(BuildContext rowContext, Offset globalPosition) {
+    if (!rowContext.mounted) return;
+    final ScrollableState? scrollable = Scrollable.maybeOf(rowContext);
+    if (scrollable == null) return;
+    if (_autoScroller?.scrollable != scrollable) {
+      _autoScroller?.stopAutoScroll();
+      _autoScroller = EdgeDraggingAutoScroller(
+        scrollable,
+        velocityScalar: 50,
+      );
+    }
+    _autoScroller!.startAutoScrollIfNecessary(
+      Rect.fromCenter(center: globalPosition, width: 1, height: 40),
+    );
+  }
+
+  void _endDrag() {
+    _autoScroller?.stopAutoScroll();
+    if (mounted && _draggingId != null) setState(() => _draggingId = null);
+  }
+
+  /// Converts a drop slot in a list that may contain the dragged item at
+  /// [current] (-1 when it is not in that list) into the index the item takes
+  /// once it has been removed from that list.
+  static int _targetIndex(int slot, int current) =>
+      current != -1 && current < slot ? slot - 1 : slot;
+
+  /// Places [item] at [slot] in the top-level order (folders and root
+  /// documents). A document from a folder is moved out of it.
+  void _dropAtRoot(ProjectWorkspaceState state, SidebarDragItem item, int slot) {
+    _endDrag();
+    final List<RootItem> items = state.rootItems();
+    final int current = items.indexWhere((RootItem it) => it.id == item.id);
+    final int target = _targetIndex(slot, current);
+    if (current == target) return; // Dropped where it already is.
+    if (item.isFolder) {
+      if (current != -1) state.reorderRootItems(current, target);
+    } else {
+      state.moveDocument(item.id, null, target);
+    }
+  }
+
+  /// Places the dragged document at [slot] in [folderId]'s document order,
+  /// moving it into that folder first if needed.
+  void _dropInFolder(
+    ProjectWorkspaceState state,
+    SidebarDragItem item,
+    String folderId,
+    int slot,
+  ) {
+    _endDrag();
+    if (item.isFolder) return; // Folders do not nest.
+    final List<Document> documents = state.documentsIn(folderId);
+    final int current =
+        documents.indexWhere((Document d) => d.id == item.id);
+    final int target = _targetIndex(slot, current);
+    if (current == target) return;
+    state.moveDocument(item.id, folderId, target);
+  }
+
+  /// Handles a drop on the folder entry at root [index]: before / after places
+  /// the item beside the folder at the top level; inside appends a document to
+  /// the end of the folder (a no-op when it is already there).
+  void _dropOnFolder(
+    ProjectWorkspaceState state,
+    SidebarDragItem item,
+    Folder folder,
+    int index,
+    SidebarDropPlacement placement,
+  ) {
+    switch (placement) {
+      case SidebarDropPlacement.before:
+        _dropAtRoot(state, item, index);
+      case SidebarDropPlacement.after:
+        _dropAtRoot(state, item, index + 1);
+      case SidebarDropPlacement.inside:
+        if (state.documentsIn(folder.id).any((Document d) => d.id == item.id)) {
+          _endDrag();
+          return;
+        }
+        _dropInFolder(
+            state, item, folder.id, state.documentsIn(folder.id).length);
+    }
+  }
+
+  /// A root-level document row. The whole row is draggable, and it accepts any
+  /// dragged item: the top half places it before this document, the bottom
+  /// half after it, at the top level.
   Widget _buildRootDocumentEntry(
     BuildContext context,
     ProjectWorkspaceState state,
     Document doc,
     int index,
   ) {
-    return Row(
+    return _SidebarDropZone(
       key: ValueKey<String>('root-doc-${doc.id}'),
-      children: <Widget>[
-        _buildDragHandle(index),
-        Expanded(child: _buildDraggableDocumentRow(context, state, doc)),
-      ],
+      placementFor: (SidebarDragItem item, double fraction) =>
+          _halfPlacement(fraction),
+      onDrop: (SidebarDragItem item, SidebarDropPlacement placement) =>
+          _dropAtRoot(
+        state,
+        item,
+        placement == SidebarDropPlacement.after ? index + 1 : index,
+      ),
+      child: _buildDraggableDocumentRow(context, state, doc),
     );
   }
 
-  /// A document row inside a folder: a drag handle (reorder within the folder)
-  /// beside the draggable, selectable document row. Needs a stable [Key] for
-  /// the folder's [ReorderableListView].
+  /// A document row inside [folder]. The whole row is draggable, and it
+  /// accepts dragged documents: the top half places them before this one, the
+  /// bottom half after it, inside [folder].
   Widget _buildFolderDocumentRow(
     BuildContext context,
     ProjectWorkspaceState state,
+    Folder folder,
     Document doc,
     int index,
   ) {
-    return Row(
+    return _SidebarDropZone(
       key: ValueKey<String>('folder-doc-${doc.id}'),
-      children: <Widget>[
-        _buildDragHandle(index),
-        Expanded(child: _buildDraggableDocumentRow(context, state, doc)),
-      ],
-    );
-  }
-
-  /// A drag handle that starts a reorder of the item at [index] within its
-  /// enclosing reorderable list.
-  Widget _buildDragHandle(int index, {bool topAligned = false}) {
-    // Read-only guides cannot be reordered: keep the indent, drop the handle.
-    if (context.read<ProjectWorkspaceState>().isReadOnly) {
-      return const SizedBox(width: 24);
-    }
-    return ReorderableDragStartListener(
-      index: index,
-      child: Padding(
-        padding: EdgeInsets.only(top: topAligned ? 8 : 6, left: 4, right: 2),
-        child: const Icon(
-          Icons.drag_indicator,
-          size: 18,
-          color: AppPalette.textSecondary,
-        ),
+      accepts: (SidebarDragItem item) => !item.isFolder,
+      placementFor: (SidebarDragItem item, double fraction) =>
+          _halfPlacement(fraction),
+      onDrop: (SidebarDragItem item, SidebarDropPlacement placement) =>
+          _dropInFolder(
+        state,
+        item,
+        folder.id,
+        placement == SidebarDropPlacement.after ? index + 1 : index,
       ),
+      child: _buildDraggableDocumentRow(context, state, doc),
     );
   }
 
-  /// Wraps a document row in a [Draggable] so its body can be dragged onto a
-  /// folder (to move it in) or the root list (to move it out). Dragging the
-  /// body is distinct from the ⠿ handle (which reorders) and from a tap (which
-  /// selects). The floating feedback is a compact chip of the title.
+  /// A document row that can be dragged from anywhere on it (unless it is
+  /// being renamed or belongs to a read-only guide), dimmed while dragged.
   Widget _buildDraggableDocumentRow(
     BuildContext context,
     ProjectWorkspaceState state,
     Document doc,
   ) {
-    // While renaming, do not make the row draggable — the inline field needs
-    // normal pointer handling.
-    if (_renamingId == doc.id || state.isReadOnly) {
-      return _buildDocumentRow(context, state, doc);
-    }
-
-    final String shownTitle =
-        doc.title.trim().isEmpty ? 'Untitled Document' : doc.title;
-
-    return Draggable<Document>(
-      data: doc,
-      dragAnchorStrategy: childDragAnchorStrategy,
-      // A small delay-free drag on the body; taps still pass through to select.
-      feedback: Material(
-        color: AppPalette.transparent,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          decoration: BoxDecoration(
-            color: AppPalette.surfaceVariant,
-            borderRadius: AppStyle.pillRadius,
-            border: Border.all(color: AppPalette.primary),
-            boxShadow: AppStyle.hoverShadow,
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: <Widget>[
-              const Icon(Icons.description_outlined,
-                  size: 16, color: AppPalette.textSecondary),
-              const SizedBox(width: 6),
-              Text(
-                shownTitle,
-                style: const TextStyle(color: AppPalette.textPrimary),
-              ),
-            ],
-          ),
-        ),
+    final Widget row = _buildDocumentRow(context, state, doc);
+    if (!_isDraggable(state, doc.id)) return row;
+    final SidebarDragItem item = SidebarDragItem.document(doc);
+    return _fadeWhileDragging(
+      item,
+      _draggable(
+        context,
+        item: item,
+        icon: Icons.description_outlined,
+        label: doc.title.trim().isEmpty ? 'Untitled Document' : doc.title,
+        child: row,
       ),
-      childWhenDragging: Opacity(
-        opacity: 0.4,
-        child: _buildDocumentRow(context, state, doc),
-      ),
-      child: _buildDocumentRow(context, state, doc),
     );
   }
 
@@ -696,6 +829,200 @@ class _ProjectSidebarViewState extends State<ProjectSidebarView> {
           onPressed: () => _confirmDeleteDocument(context, state, doc),
         ),
       ],
+    );
+  }
+}
+
+/// What is being dragged in the Project_Sidebar: one document or one folder.
+@immutable
+class SidebarDragItem {
+  const SidebarDragItem.document(Document this.document) : folder = null;
+  const SidebarDragItem.folder(Folder this.folder) : document = null;
+
+  /// The dragged document, or `null` when a folder is dragged.
+  final Document? document;
+
+  /// The dragged folder, or `null` when a document is dragged.
+  final Folder? folder;
+
+  bool get isFolder => folder != null;
+
+  /// The dragged item's id (folder and document ids are UUIDs, never equal).
+  String get id => folder?.id ?? document!.id;
+}
+
+/// Where a dragged item lands relative to the row it is dropped on.
+enum SidebarDropPlacement {
+  /// Above the row, in the row's container.
+  before,
+
+  /// Below the row, in the row's container.
+  after,
+
+  /// Into the row (a document dropped on a folder).
+  inside,
+}
+
+/// A drop target around one sidebar row (or area). It decides the placement
+/// from the pointer's vertical position within the row, shows where the item
+/// will land (a line above or below, or an outline for "inside"), and reports
+/// the drop.
+class _SidebarDropZone extends StatefulWidget {
+  const _SidebarDropZone({
+    super.key,
+    required this.placementFor,
+    required this.onDrop,
+    required this.child,
+    this.accepts,
+    this.hoverHint,
+  });
+
+  /// Whether this zone takes [item]; all items when null. A rejected item
+  /// falls through to the enclosing zone, if any.
+  final bool Function(SidebarDragItem item)? accepts;
+
+  /// The placement for [item] at [fraction] of this zone's height (0 = top).
+  final SidebarDropPlacement Function(SidebarDragItem item, double fraction)
+      placementFor;
+
+  final void Function(SidebarDragItem item, SidebarDropPlacement placement)
+      onDrop;
+
+  /// Optional text shown centred in the zone while an item hovers over it.
+  final String? hoverHint;
+
+  final Widget child;
+
+  @override
+  State<_SidebarDropZone> createState() => _SidebarDropZoneState();
+}
+
+class _SidebarDropZoneState extends State<_SidebarDropZone> {
+  /// The placement under the pointer while an accepted item hovers here.
+  SidebarDropPlacement? _placement;
+
+  bool _accepts(SidebarDragItem item) => widget.accepts?.call(item) ?? true;
+
+  SidebarDropPlacement _placementAt(SidebarDragItem item, Offset global) {
+    final RenderObject? box = context.findRenderObject();
+    if (box is! RenderBox || !box.hasSize || box.size.height <= 0) {
+      return widget.placementFor(item, 0.5);
+    }
+    final double fraction =
+        (box.globalToLocal(global).dy / box.size.height).clamp(0.0, 1.0);
+    return widget.placementFor(item, fraction);
+  }
+
+  void _show(SidebarDropPlacement? placement) {
+    if (placement != _placement) setState(() => _placement = placement);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return DragTarget<SidebarDragItem>(
+      onWillAcceptWithDetails: (DragTargetDetails<SidebarDragItem> d) =>
+          _accepts(d.data),
+      // A zone that refused the item may still get moves; ignore them.
+      onMove: (DragTargetDetails<SidebarDragItem> d) {
+        if (_accepts(d.data)) _show(_placementAt(d.data, d.offset));
+      },
+      onLeave: (_) => _show(null),
+      onAcceptWithDetails: (DragTargetDetails<SidebarDragItem> d) {
+        final SidebarDropPlacement placement = _placementAt(d.data, d.offset);
+        _show(null);
+        widget.onDrop(d.data, placement);
+      },
+      builder: (
+        BuildContext context,
+        List<SidebarDragItem?> candidates,
+        List<dynamic> rejected,
+      ) {
+        final SidebarDropPlacement? shown =
+            candidates.isEmpty ? null : _placement;
+        return Stack(
+          children: <Widget>[
+            widget.child,
+            if (shown == SidebarDropPlacement.inside)
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      border: Border.all(color: AppPalette.primary, width: 2),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                  ),
+                ),
+              ),
+            if (shown == SidebarDropPlacement.before ||
+                shown == SidebarDropPlacement.after)
+              Positioned(
+                left: AppSpacing.sm,
+                right: AppSpacing.sm,
+                top: shown == SidebarDropPlacement.before ? 0 : null,
+                bottom: shown == SidebarDropPlacement.after ? 0 : null,
+                height: 2,
+                child: const IgnorePointer(
+                  child: ColoredBox(color: AppPalette.primary),
+                ),
+              ),
+            if (shown != null && widget.hoverHint != null)
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: Center(
+                    child: Text(
+                      widget.hoverHint!,
+                      style: const TextStyle(color: AppPalette.textSecondary),
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+/// The chip that follows the pointer while a sidebar row is dragged.
+class _SidebarDragChip extends StatelessWidget {
+  const _SidebarDragChip({required this.icon, required this.label});
+
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    // The drag is anchored at the pointer; nudge the chip off the cursor.
+    return Transform.translate(
+      offset: const Offset(12, -18),
+      child: Material(
+        color: AppPalette.transparent,
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 280),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: AppPalette.surfaceVariant,
+            borderRadius: AppStyle.pillRadius,
+            border: Border.all(color: AppPalette.primary),
+            boxShadow: AppStyle.hoverShadow,
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              Icon(icon, size: 16, color: AppPalette.textSecondary),
+              const SizedBox(width: 6),
+              Flexible(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: AppPalette.textPrimary),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
