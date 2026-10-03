@@ -4,6 +4,52 @@ All notable changes to Spwrite are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [1.3.4] (Beta) - Unreleased
+
+### Added
+
+- **Keyboard shortcuts like a word processor** (Cmd on Mac, Ctrl on Windows
+  and Linux): bold, italic, link, headings 1–3 and normal text, numbered and
+  bulleted lists (Shift+7 / Shift+8), redo (Shift+Z), save now (S), focus mode
+  (Shift+F), hide the sidebar (Backslash), AI panel (Shift+A), and a shortcut
+  list (/). Toolbar tooltips show each button's shortcut.
+- **Focus mode.** Hides the sidebar, title, toolbar and panels, leaving only
+  the page and a small word-count chip. Esc leaves it.
+- **Words this session.** The word count also shows how many words were added
+  since the document was opened (e.g. "1,240 words · +312").
+- **Em dash.** Typing three hyphens (`---`) turns into "—".
+- **More room at the bottom of the page**, so the last lines can be scrolled up
+  to eye level.
+- **Built-in User Guide and Developer Guide projects.** Always listed first on
+  the dashboard, read-only, and cannot be deleted or renamed. They update
+  automatically when a new version changes them. The User Guide covers every
+  feature; the Developer Guide covers the app's layers, SOLID principles, the
+  database, building, testing and conventions.
+- **Guides switch** next to New project hides or shows the two guides. The
+  choice is remembered.
+
+### Changed
+
+- **The AI assistant shows "Coming soon".** Nothing can be downloaded and no
+  background indexing runs while it is being stabilised on the `ai_feature`
+  branch.
+
+### Fixed
+
+- **Italic text came back with underscores at both ends** after autosave and
+  reopening, when the selection included a space or covered part of a word.
+  Italic and bold now save correctly, and documents already affected are
+  repaired automatically when opened.
+- **The last few seconds of typing could be lost or saved to the wrong
+  document** when switching or creating a document, closing the project, or
+  quitting within the 2-second autosave window. Pending edits are now saved
+  first.
+- **Bullets and numbers sat above the text in lists.** The markers now use the
+  same font, size and double line spacing as the text, so they line up.
+- **Some shortcuts added formatting that vanished after saving** (underline,
+  strikethrough, inline code, quote, checklist, indent, image). These are now
+  turned off.
+
 ## [1.2.3] (Beta) - Unreleased
 
 ### Fixed
