@@ -889,6 +889,17 @@ class _EditorViewState extends State<EditorView> {
   /// Every other key returns `null`, letting the editor handle it normally.
   KeyEventResult? _onEditorKeyPressed(KeyEvent event, Node? node) {
     if (event is! KeyDownEvent && event is! KeyRepeatEvent) return null;
+
+    // Esc leaves focus mode. It must be handled here, before flutter_quill's
+    // shortcuts: its built-in Esc binding ("hide selection toolbar") replaces
+    // any custom Esc binding, so a shortcut-map entry never fires.
+    if (event.logicalKey == LogicalKeyboardKey.escape) {
+      final ProjectWorkspaceState state = context.read<ProjectWorkspaceState>();
+      if (!state.focusMode) return null;
+      state.exitFocusMode();
+      return KeyEventResult.handled;
+    }
+
     if (event.logicalKey != LogicalKeyboardKey.tab) return null;
     // Leave Shift+Tab to the default (outdent) behaviour.
     if (HardwareKeyboard.instance.isShiftPressed) return null;
