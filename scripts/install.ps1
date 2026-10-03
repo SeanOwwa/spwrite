@@ -70,6 +70,13 @@ $WantDeps  = [bool]$Deps
 $CheckOnly = [bool]$Check
 if ($Platform -eq 'deps')  { $WantDeps = $true;  $Platform = 'windows' }
 if ($Platform -eq 'check') { $CheckOnly = $true; $Platform = 'windows' }
+# Windows on ARM: the build would target ARM64, which isn't supported.
+$IsArmPc = ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64') -or ($env:PROCESSOR_ARCHITEW6432 -eq 'ARM64')
+if ($IsArmPc -and -not $CheckOnly) {
+  Write-Host "[error] Spwrite can't be built on Windows on ARM: its AI engine (llama.cpp) doesn't compile with MSVC on ARM64." -ForegroundColor Red
+  Write-Host "        Download the x64 version from the website instead; Windows 11 on ARM runs it through built-in emulation." -ForegroundColor Red
+  exit 1
+}
 if ($Platform -eq 'web') {
   Write-Host "[error] The web version is no longer offered. Build the desktop app instead: .\scripts\install.ps1 windows" -ForegroundColor Red
   exit 1
@@ -183,24 +190,6 @@ function Get-VsCppInstall {
   return $null
 }
 
-# Whether this PC is Windows on ARM (the build targets ARM64 there).
-$IsArmPc = ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64') -or ($env:PROCESSOR_ARCHITEW6432 -eq 'ARM64')
-
-# Visual Studio's Clang tools. The AI engine (llama.cpp) can't be built with
-# MSVC on ARM64, so ARM PCs need clang-cl and its MSBuild toolset.
-$ClangComponents = @(
-  'Microsoft.VisualStudio.Component.VC.Llvm.Clang',
-  'Microsoft.VisualStudio.Component.VC.Llvm.ClangToolset'
-)
-function Test-VsClang {
-  $vswhere = Get-VsWherePath
-  if (-not $vswhere) { return $false }
-  try {
-    $found = & $vswhere -products * -latest -requires $ClangComponents -property installationPath 2>$null
-    return [bool]($LASTEXITCODE -eq 0 -and $found)
-  } catch { return $false }
-}
-
 # Developer Mode lets non-admin users create the symlinks Flutter plugins use.
 function Test-DeveloperMode {
   try {
@@ -238,10 +227,6 @@ function Invoke-Checks {
     $vs = Get-VsCppInstall
     if ($vs) { Write-Ok 'Visual Studio C++ tools' $vs }
     else { Write-Missing 'Visual Studio C++ tools' 'Visual Studio 2022 Build Tools, "Desktop development with C++"' }
-    if ($IsArmPc) {
-      if (Test-VsClang) { Write-Ok 'Visual Studio Clang tools' 'installed (needed on ARM64)' }
-      else { Write-Missing 'Visual Studio Clang tools' 'ARM64 needs "C++ Clang Compiler for Windows" and "MSBuild support for LLVM (clang-cl) toolset"' }
-    }
   }
 
   if (Test-DeveloperMode)  { Write-Ok 'Developer Mode' 'on' }
@@ -324,26 +309,10 @@ function Invoke-Bootstrap {
       Write-Step "Visual Studio C++ tools: $vs"
     } elseif (Confirm-Step 'Install Visual Studio 2022 Build Tools with "Desktop development with C++" (large download, several GB)?') {
       $components = '--add Microsoft.VisualStudio.Workload.VCTools --add Microsoft.VisualStudio.Component.VC.Tools.x86.x64 --includeRecommended'
-      if ($IsArmPc) {
-        $components += ' --add Microsoft.VisualStudio.Component.VC.Tools.ARM64'
-        foreach ($c in $ClangComponents) { $components += " --add $c" }
-      }
       Install-Pkg 'Visual Studio Build Tools' 'Microsoft.VisualStudio.2022.BuildTools' 'visualstudio2022buildtools' `
         "--wait --passive --norestart $components" "$components --passive" | Out-Null
       if (-not (Get-VsCppInstall)) {
         Write-Warn "The C++ tools weren't detected yet. If the Visual Studio Installer is still running, let it finish, then re-run."
-      }
-    }
-    if ($IsArmPc -and (Get-VsCppInstall) -and -not (Test-VsClang)) {
-      if (Confirm-Step 'Windows on ARM needs Visual Studio''s Clang tools to build the AI engine. Add them now (needs administrator approval)?') {
-        $vsPath = & (Get-VsWherePath) -products * -latest -property installationPath
-        $setup = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\setup.exe'
-        $argsList = @('modify', '--installPath', "`"$vsPath`"", '--passive', '--norestart')
-        foreach ($c in $ClangComponents) { $argsList += @('--add', $c) }
-        $proc = Start-Process -FilePath $setup -ArgumentList $argsList -Verb RunAs -Wait -PassThru
-        if ($proc.ExitCode -ne 0 -and $proc.ExitCode -ne 3010) {
-          Write-Warn "The Visual Studio Installer reported a problem ($($proc.ExitCode)). Add the Clang tools in the Visual Studio Installer, then re-run."
-        }
       }
     }
   }
@@ -457,27 +426,6 @@ if ($LASTEXITCODE -ne 0) {
   Stop-WithError "Couldn't download the app's packages. If the message mentions 'symlink', turn on Developer Mode (Settings > System > For developers). Otherwise check your internet connection, then re-run."
 }
 
-
-# On Windows on ARM, the AI engine must be compiled with clang (llama.cpp
-# rejects MSVC on ARM64). Patch fllama's build hook to use ClangCL there.
-if ($IsArmPc) {
-  if (-not (Test-VsClang)) {
-    Write-Warn "Visual Studio's Clang tools are missing, so the build will likely fail on ARM64. Re-run with -Deps to add them."
-  }
-  & dart run tool/patch_fllama_clangcl.dart
-  if ($LASTEXITCODE -ne 0) { Stop-WithError "Couldn't prepare the AI engine build for ARM64 (see the message above)." }
-  # A previous failed attempt leaves a CMake cache configured for MSVC, which
-  # CMake refuses to switch to ClangCL. Clear only those stale caches.
-  $fllamaCache = Join-Path $env:LOCALAPPDATA 'fllama\Cache'
-  if (Test-Path $fllamaCache) {
-    Get-ChildItem -Path $fllamaCache -Recurse -Filter CMakeCache.txt -ErrorAction SilentlyContinue |
-      Where-Object { -not (Select-String -Path $_.FullName -Pattern 'CMAKE_GENERATOR_TOOLSET:INTERNAL=ClangCL' -Quiet) } |
-      ForEach-Object {
-        Write-Step "Clearing a stale AI engine build cache: $($_.DirectoryName)"
-        Remove-Item -Recurse -Force $_.DirectoryName
-      }
-  }
-}
 
 # --- 4. Build ------------------------------------------------------------
 Write-Step "Building the app for $Platform (first run can take a few minutes)..."

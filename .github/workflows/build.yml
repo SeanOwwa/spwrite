@@ -2,12 +2,13 @@
 # machines (each desktop app must be built on its own operating system), then
 # optionally publishes them to the website (SeanOwwa/spwrite.web).
 #
-# Builds: macOS (Apple Silicon, also runs on Intel), Windows ARM64 and x64,
-# and Debian-based Linux ARM64 and x64.
+# Builds: macOS (Apple Silicon, also runs on Intel), Windows x64, and
+# Debian-based Linux ARM64 and x64. (Windows ARM64 is not built: the bundled
+# AI engine, llama.cpp, does not compile with MSVC on ARM64.)
 #
 # How to use:
 #   - Build only: GitHub > Actions > "Build desktop apps" > Run workflow.
-#     The five zips appear as artifacts on the run's page.
+#     The four zips appear as artifacts on the run's page.
 #   - Build and update the website: same, but tick "Publish to the website".
 #   - Release: push a version tag, e.g.
 #       git tag v1.3.5 && git push origin v1.3.5
@@ -82,44 +83,19 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - arch: arm64
-            runner: windows-11-arm
           - arch: x64
             runner: windows-latest
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
       - name: Install Flutter
-        # Cloned (rather than flutter-action) so x64 and ARM64 install the same way.
+        # Cloned rather than installed with flutter-action, matching the other jobs.
         shell: pwsh
         run: |
           git clone --depth 1 --branch $env:FLUTTER_VERSION https://github.com/flutter/flutter.git "$env:RUNNER_TEMP\flutter"
           "$env:RUNNER_TEMP\flutter\bin" | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
       - run: flutter --version
       - run: flutter pub get
-      - name: Build the AI engine with clang on ARM64
-        # llama.cpp (bundled by fllama) refuses MSVC on ARM64 ("MSVC is not
-        # supported for ARM, use clang"), which shows up as "Building native
-        # assets failed". Make sure Visual Studio has its Clang tools, then
-        # patch fllama's build hook to use the ClangCL toolset for Windows
-        # ARM64 only. The rest of the app still builds with MSVC.
-        if: matrix.arch == 'arm64'
-        shell: pwsh
-        run: |
-          $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
-          $vs = & $vswhere -products * -latest -property installationPath
-          $clang = 'Microsoft.VisualStudio.Component.VC.Llvm.Clang'
-          $toolset = 'Microsoft.VisualStudio.Component.VC.Llvm.ClangToolset'
-          $has = & $vswhere -products * -latest -requires $clang $toolset -property installationPath
-          if (-not $has) {
-            Write-Host "Adding Visual Studio's Clang tools to $vs ..."
-            $setup = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\setup.exe'
-            $p = Start-Process -FilePath $setup -Wait -PassThru -ArgumentList @(
-              'modify', '--installPath', "`"$vs`"", '--add', $clang, '--add', $toolset,
-              '--quiet', '--norestart', '--nocache')
-            if ($p.ExitCode -ne 0 -and $p.ExitCode -ne 3010) { throw "Visual Studio Installer failed ($($p.ExitCode))." }
-          }
-          dart run tool/patch_fllama_clangcl.dart
       - run: flutter build windows --release
       - name: Zip the Release folder
         # The whole folder is the app: spwrite.exe needs the files beside it
@@ -159,7 +135,7 @@ jobs:
             pkg-config libgtk-3-dev liblzma-dev libsqlite3-dev \
             libsecret-1-dev libglu1-mesa zip
       - name: Install Flutter
-        # Cloned (rather than flutter-action) so x64 and ARM64 install the same way.
+        # Cloned rather than installed with flutter-action, matching the other jobs.
         run: |
           git clone --depth 1 --branch "$FLUTTER_VERSION" https://github.com/flutter/flutter.git "$RUNNER_TEMP/flutter"
           echo "$RUNNER_TEMP/flutter/bin" >> "$GITHUB_PATH"
