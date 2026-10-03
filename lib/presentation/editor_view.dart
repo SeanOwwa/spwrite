@@ -39,6 +39,8 @@ library;
 // in one contained place, so silence that specific lint for this file.
 // ignore_for_file: experimental_member_use
 
+import 'dart:ui' show AppExitResponse;
+
 import 'package:flutter/material.dart';
 // The flutter_quill barrel exports a `Document` class that collides with the
 // app's domain [Document]. Hide it from the general import and pull it in under
@@ -49,11 +51,14 @@ import 'package:flutter_quill/flutter_quill.dart' as quill show Document;
 import 'package:flutter_quill/quill_delta.dart';
 import 'package:provider/provider.dart';
 
+import '../app_info.dart';
 import '../domain/document.dart';
 import '../state/project_workspace_state.dart';
 import '../theme/app_theme.dart';
+import 'ai_coming_soon_panel.dart';
 import 'ai_panel_view.dart';
 import 'character_panel_view.dart';
+import 'editor_shortcuts.dart';
 import 'editor_toolbar.dart';
 import 'export/export_dialog.dart';
 
@@ -113,8 +118,103 @@ class _EditorViewState extends State<EditorView> {
   /// avoids notifying the state during the frame in which we rebuild.
   bool _syncingDocument = false;
 
+  /// Word count when the current document was opened, so the badge can show
+  /// how much was written this sitting ("+312").
+  int _baselineWordCount = 0;
+
+  /// Flushes pending edits when the app is backgrounded or asked to quit, so
+  /// closing the window right after typing never loses the last sentence.
+  late final AppLifecycleListener _lifecycle;
+
+  @override
+  void initState() {
+    super.initState();
+    _lifecycle = AppLifecycleListener(
+      onInactive: _saveNow,
+      onHide: _saveNow,
+      onPause: _saveNow,
+      onExitRequested: () async {
+        await _saveNowAsync();
+        return AppExitResponse.exit;
+      },
+    );
+  }
+
+  void _saveNow() => _saveNowAsync();
+
+  Future<void> _saveNowAsync() async {
+    if (!mounted) return;
+    try {
+      await context.read<ProjectWorkspaceState>().saveNow();
+    } catch (_) {
+      // Save failures surface through the state's own save indicator.
+    }
+  }
+
+  /// Runs an [EditorCommand] bound in editor_shortcuts.dart.
+  void _runCommand(EditorCommand command) {
+    final ProjectWorkspaceState state = context.read<ProjectWorkspaceState>();
+    final QuillController? controller = _controller;
+    switch (command) {
+      case EditorCommand.saveNow:
+        _saveNow();
+      case EditorCommand.toggleFocusMode:
+        if (!state.focusMode) {
+          // Focus mode is just the page: close the side panels too.
+          setState(() {
+            _aiPanelOpen = false;
+            _characterPanelOpen = false;
+          });
+        }
+        state.toggleFocusMode();
+        _editorFocusNode.requestFocus();
+      case EditorCommand.exitFocusMode:
+        state.exitFocusMode();
+      case EditorCommand.toggleSidebar:
+        state.toggleSidebar();
+      case EditorCommand.toggleAiPanel:
+        state.exitFocusMode();
+        setState(() {
+          _aiPanelOpen = !_aiPanelOpen;
+          if (_aiPanelOpen) _characterPanelOpen = false;
+        });
+      case EditorCommand.showShortcuts:
+        showShortcutsDialog(context);
+      case EditorCommand.numberedList:
+        if (controller != null) _toggleList(controller, Attribute.ol);
+      case EditorCommand.bulletedList:
+        if (controller != null) _toggleList(controller, Attribute.ul);
+      case EditorCommand.redo:
+        if (controller != null && controller.hasRedo) controller.redo();
+    }
+  }
+
+  /// Applies [list] to the selected lines, or removes it if already applied.
+  void _toggleList(QuillController controller, Attribute<String?> list) {
+    final Attribute<Object?>? current =
+        controller.getSelectionStyle().attributes[Attribute.list.key];
+    controller.formatSelection(
+      current?.value == list.value
+          ? Attribute.clone(Attribute.list, null)
+          : list,
+    );
+  }
+
+  /// The actions behind [editorShortcuts], shared by the editor itself and the
+  /// surrounding chrome (toolbar, panels) so shortcuts work wherever focus is.
+  late final Map<Type, Action<Intent>> _commandActions =
+      <Type, Action<Intent>>{
+    EditorCommandIntent: CallbackAction<EditorCommandIntent>(
+      onInvoke: (EditorCommandIntent intent) {
+        _runCommand(intent.command);
+        return null;
+      },
+    ),
+  };
+
   @override
   void dispose() {
+    _lifecycle.dispose();
     _controller?.dispose();
     _editorFocusNode.dispose();
     _editorScrollController.dispose();
@@ -143,6 +243,7 @@ class _EditorViewState extends State<EditorView> {
 
     // Seed the word count from the freshly loaded document.
     _wordCount = _countWords(controller.document.toPlainText());
+    _baselineWordCount = _wordCount;
 
     // Forward local edits (typing / toolbar formatting) to the state layer,
     // which computes the Markdown, enforces the cap, and schedules the save
@@ -235,16 +336,44 @@ class _EditorViewState extends State<EditorView> {
     final bool atMaxLength =
         active.content.length >= ProjectWorkspaceState.maxContentLength;
 
+    final bool focusMode = state.focusMode;
+
     final Widget editorColumn = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
-        _buildTitleBar(context, active),
-        _buildToolbarRow(context),
+        // Focus mode keeps only the page; everything else steps away.
+        if (!focusMode) _buildTitleBar(context, active),
+        if (!focusMode) _buildToolbarRow(context),
         if (atMaxLength) _buildMaxLengthIndicator(context),
-        Expanded(child: _buildEditor()),
+        Expanded(
+          child: Stack(
+            children: <Widget>[
+              Positioned.fill(child: _buildEditor(focusMode: focusMode)),
+              if (focusMode)
+                Positioned(
+                  right: AppSpacing.lg,
+                  bottom: AppSpacing.lg,
+                  child: _buildFocusModePill(context),
+                ),
+            ],
+          ),
+        ),
       ],
     );
 
+    // Shortcuts also work while focus is in the toolbar or a side panel; when
+    // the editor has focus, its own (identical) bindings handle them first.
+    return Shortcuts(
+      shortcuts: editorShortcuts(inFocusMode: focusMode),
+      child: Actions(
+        actions: _commandActions,
+        child: _buildEditorRow(editorColumn, focusMode: focusMode),
+      ),
+    );
+  }
+
+  /// The editor column plus, outside focus mode, the shared right-hand panel.
+  Widget _buildEditorRow(Widget editorColumn, {required bool focusMode}) {
     // The Character Panel and the AI Panel share a single right-hand sidebar
     // slot beside the editor: at most one is open at a time (Req 1.2, 1.3,
     // 1.5), so opening one closes the other and the editor keeps its width.
@@ -252,7 +381,9 @@ class _EditorViewState extends State<EditorView> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
         Expanded(child: editorColumn),
-        if (_characterPanelOpen) ...<Widget>[
+        if (focusMode)
+          ...const <Widget>[]
+        else if (_characterPanelOpen) ...<Widget>[
           const VerticalDivider(
             width: 1,
             thickness: 1,
@@ -272,9 +403,15 @@ class _EditorViewState extends State<EditorView> {
           ),
           SizedBox(
             width: _sidePanelWidth,
-            child: AiPanelView(
-              onClose: () => setState(() => _aiPanelOpen = false),
-            ),
+            // While the assistant is unavailable the slot shows a "Coming
+            // soon" panel; AiPanelView (and its providers) are never built.
+            child: AppInfo.aiAssistantAvailable
+                ? AiPanelView(
+                    onClose: () => setState(() => _aiPanelOpen = false),
+                  )
+                : AiComingSoonPanel(
+                    onClose: () => setState(() => _aiPanelOpen = false),
+                  ),
           ),
         ],
       ],
@@ -556,7 +693,46 @@ class _EditorViewState extends State<EditorView> {
   /// The live word-count badge shown in the upper-right corner of the title
   /// bar. Reflects [_wordCount], which is kept in sync with the editor content.
   Widget _buildWordCount(BuildContext context) {
-    final String label = _wordCount == 1 ? '1 word' : '$_wordCount words';
+    final int written = _wordCount - _baselineWordCount;
+    final String label = written > 0
+        ? '${_wordsLabel(_wordCount)}  ·  +${_formatCount(written)}'
+        : _wordsLabel(_wordCount);
+    return Tooltip(
+      message: written > 0
+          ? '${_formatCount(written)} words written since you opened this '
+              'document'
+          : 'Words in this document',
+      child: _buildWordCountChip(context, label),
+    );
+  }
+
+  /// "1 word" / "1,234 words".
+  static String _wordsLabel(int count) =>
+      count == 1 ? '1 word' : '${_formatCount(count)} words';
+
+  /// Formats [n] with thousands separators (1234 → "1,234").
+  static String _formatCount(int n) {
+    final String digits = n.abs().toString();
+    final StringBuffer out = StringBuffer(n < 0 ? '-' : '');
+    for (int i = 0; i < digits.length; i++) {
+      if (i > 0 && (digits.length - i) % 3 == 0) out.write(',');
+      out.write(digits[i]);
+    }
+    return out.toString();
+  }
+
+  /// The quiet status pill shown in focus mode: word count and how to leave.
+  Widget _buildFocusModePill(BuildContext context) {
+    return Opacity(
+      opacity: 0.85,
+      child: _buildWordCountChip(
+        context,
+        '${_wordsLabel(_wordCount)}  ·  Esc to leave focus mode',
+      ),
+    );
+  }
+
+  Widget _buildWordCountChip(BuildContext context, String label) {
     return Container(
       padding: const EdgeInsets.symmetric(
         horizontal: AppSpacing.md,
@@ -601,18 +777,30 @@ class _EditorViewState extends State<EditorView> {
   /// [ProjectWorkspaceState.onContentChanged] via the document-change listener
   /// wired in [_syncToDocument]; the state layer enforces the cap
   /// authoritatively (Req 14.8, 15.4).
-  Widget _buildEditor() {
+  Widget _buildEditor({required bool focusMode}) {
     return LayoutBuilder(
       builder: (BuildContext context, BoxConstraints constraints) {
         // Keep the manuscript at a comfortable reading measure on wide desktop
         // windows. The margin is applied *inside* the editor's scroll view so
         // the wheel scrolls anywhere and the scrollbar stays at the edge.
-        final double side =
-            constraints.maxWidth > _maxMeasure + 2 * AppSpacing.xl
-                ? (constraints.maxWidth - _maxMeasure) / 2
-                : AppSpacing.xl;
+        // Focus mode uses a slightly narrower, book-like column.
+        final double measure = focusMode ? _focusMeasure : _maxMeasure;
+        final double side = constraints.maxWidth > measure + 2 * AppSpacing.xl
+            ? (constraints.maxWidth - measure) / 2
+            : AppSpacing.xl;
+        // Generous bottom padding lets the last lines be scrolled up to eye
+        // level instead of being pinned to the bottom edge of the window.
+        final double bottom = constraints.maxHeight.isFinite
+            ? constraints.maxHeight * 0.4
+            : AppSpacing.xxl;
         return _buildQuillEditor(
-          EdgeInsets.fromLTRB(side, AppSpacing.lg, side, AppSpacing.xxl),
+          EdgeInsets.fromLTRB(
+            side,
+            focusMode ? AppSpacing.xxl : AppSpacing.lg,
+            side,
+            bottom,
+          ),
+          focusMode: focusMode,
         );
       },
     );
@@ -621,7 +809,10 @@ class _EditorViewState extends State<EditorView> {
   /// The widest the manuscript text column grows, in logical pixels.
   static const double _maxMeasure = 860;
 
-  Widget _buildQuillEditor(EdgeInsets padding) {
+  /// The text column width in focus mode (~70 characters per line).
+  static const double _focusMeasure = 720;
+
+  Widget _buildQuillEditor(EdgeInsets padding, {required bool focusMode}) {
     return ColoredBox(
       color: AppPalette.background,
       child: QuillEditor(
@@ -640,6 +831,12 @@ class _EditorViewState extends State<EditorView> {
           // non-null result here short-circuits that, so our indent always
           // wins on every platform, including web.
           onKeyPressed: _onEditorKeyPressed,
+          // Word-processor shortcuts on top of flutter_quill's defaults, and
+          // unsupported default formats switched off (editor_shortcuts.dart).
+          customShortcuts: editorShortcuts(inFocusMode: focusMode),
+          customActions: _commandActions,
+          // Typing replacements, e.g. `---` becomes an em dash (—).
+          characterShortcutEvents: typingShortcutEvents,
           // Serif body text with double (2.0) line spacing — the Google Docs
           // standard for manuscripts. Only the styles we want to override are
           // provided; flutter_quill merges these over its defaults.

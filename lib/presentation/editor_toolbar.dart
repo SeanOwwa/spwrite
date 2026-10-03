@@ -24,6 +24,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_quill/flutter_quill.dart';
 
 import '../theme/app_theme.dart';
+import 'editor_shortcuts.dart';
 
 /// The WYSIWYG formatting toolbar bound to [controller], exposing only the
 /// supported controls: bold, italic, headings, ordered list, unordered
@@ -40,7 +41,39 @@ class EditorToolbar extends StatelessWidget {
   Widget build(BuildContext context) {
     return QuillSimpleToolbar(
       controller: controller,
-      config: const QuillSimpleToolbarConfig(
+      config: QuillSimpleToolbarConfig(
+        // Each control's tooltip names its keyboard shortcut, as in a word
+        // processor (bindings live in editor_shortcuts.dart).
+        buttonOptions: QuillSimpleToolbarButtonOptions(
+          bold: QuillToolbarToggleStyleButtonOptions(
+            tooltip: ShortcutLabel.tooltip('Bold', ShortcutLabel.of('B')),
+          ),
+          italic: QuillToolbarToggleStyleButtonOptions(
+            tooltip: ShortcutLabel.tooltip('Italic', ShortcutLabel.of('I')),
+          ),
+          selectHeaderStyleDropdownButton:
+              QuillToolbarSelectHeaderStyleDropdownButtonOptions(
+            tooltip: ShortcutLabel.tooltip(
+              'Text style',
+              '${ShortcutLabel.of('0')}–3',
+            ),
+          ),
+          listNumbers: QuillToolbarToggleStyleButtonOptions(
+            tooltip: ShortcutLabel.tooltip(
+              'Numbered list',
+              ShortcutLabel.shifted('7'),
+            ),
+          ),
+          listBullets: QuillToolbarToggleStyleButtonOptions(
+            tooltip: ShortcutLabel.tooltip(
+              'Bulleted list',
+              ShortcutLabel.shifted('8'),
+            ),
+          ),
+          linkStyle: QuillToolbarLinkStyleButtonOptions(
+            tooltip: ShortcutLabel.tooltip('Link', ShortcutLabel.of('K')),
+          ),
+        ),
         // Draw the toolbar surface and its dividers from the dark palette so
         // no slot falls back to a light-mode / system-default color
         // (Req 18.2, 18.5).

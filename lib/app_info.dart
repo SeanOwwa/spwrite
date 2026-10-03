@@ -17,4 +17,11 @@ class AppInfo {
 
   /// The full, display-ready version label, e.g. `Beta 1.2.3`.
   static const String version = '$channel $versionNumber';
+
+  /// Whether the AI assistant is available in this build.
+  ///
+  /// `false` on `main`: the assistant is still being stabilised on the
+  /// `ai_feature` branch. While off, the AI panel shows "Coming soon", no
+  /// model can be downloaded, and no background indexing runs.
+  static const bool aiAssistantAvailable = false;
 }

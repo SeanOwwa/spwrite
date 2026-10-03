@@ -958,6 +958,9 @@ class ProjectWorkspaceState extends ChangeNotifier {
   /// existing documents are retained unchanged and a recoverable error is
   /// surfaced (Req 10.7). Listeners are always notified.
   Future<void> createDocument({String? folderId}) async {
+    // Persist the outgoing document's pending edit before the new one becomes
+    // active (see [selectDocument]).
+    await saveNow();
     final Document doc = Document.newDocument(
       id: const Uuid().v4(),
       projectId: _project.id,
@@ -1008,6 +1011,10 @@ class ProjectWorkspaceState extends ChangeNotifier {
   Future<void> selectDocument(String id) async {
     // Req 11.5: selecting the already-active document does not reload it.
     if (_activeDocument?.id == id) return;
+
+    // Write the outgoing document's pending edit before switching; otherwise
+    // the debounced save would later persist whichever document is active then.
+    await saveNow();
 
     _editorStatus = DocStatus.loading; // Req 11.3
     notifyListeners();
@@ -1218,11 +1225,59 @@ class ProjectWorkspaceState extends ChangeNotifier {
   /// On a repository failure the in-memory Content is retained and a recoverable
   /// error is surfaced, so the next edit reschedules the save and the change is
   /// retried naturally (Req 16.2, 16.3).
+  /// Whether focus mode is on: the sidebar, title bar, toolbar and side panels
+  /// are hidden so only the page remains (Cmd/Ctrl+Shift+F).
+  bool get focusMode => _focusMode;
+  bool _focusMode = false;
+
+  /// Whether the project sidebar is shown in the wide layout (Cmd/Ctrl+\).
+  /// Focus mode hides it regardless.
+  bool get sidebarVisible => _sidebarVisible && !_focusMode;
+  bool _sidebarVisible = true;
+
+  /// Turns focus mode on or off.
+  void toggleFocusMode() {
+    _focusMode = !_focusMode;
+    notifyListeners();
+  }
+
+  /// Leaves focus mode (Esc). A no-op when it is already off.
+  void exitFocusMode() {
+    if (!_focusMode) return;
+    _focusMode = false;
+    notifyListeners();
+  }
+
+  /// Shows or hides the project sidebar. Leaving focus mode first makes the
+  /// shortcut always visibly do something.
+  void toggleSidebar() {
+    if (_focusMode) {
+      _focusMode = false;
+      _sidebarVisible = true;
+    } else {
+      _sidebarVisible = !_sidebarVisible;
+    }
+    notifyListeners();
+  }
+
+  /// Writes any pending (debounced) edit to disk right away.
+  ///
+  /// Backs the editor's Cmd/Ctrl+S shortcut and is also called before the
+  /// active document changes and when the app is closing or backgrounded, so
+  /// the last few seconds of typing are never lost. A no-op when nothing is
+  /// pending.
+  Future<void> saveNow() async {
+    if (!_autosaveDebouncer.isPending) return;
+    _autosaveDebouncer.cancel();
+    await _persistActive();
+  }
+
   Future<void> _persistActive() async {
     final Document? activeDoc = _activeDocument;
     if (activeDoc == null) return;
     try {
       await _documentRepo.update(activeDoc);
+      if (_disposed) return;
       // The in-memory Content is now on disk: settle the indicator to "saved".
       // Guard against a document switch mid-save so we do not flash "saved"
       // for a document that is no longer active.
@@ -1231,6 +1286,7 @@ class ProjectWorkspaceState extends ChangeNotifier {
         notifyListeners();
       }
     } catch (_) {
+      if (_disposed) return;
       // Req 16.2: retain the in-memory Content; surface a recoverable error.
       _transientError = 'Save failed.';
       _saveStatus = SaveStatus.error;
@@ -1257,7 +1313,15 @@ class ProjectWorkspaceState extends ChangeNotifier {
   /// as part of disposal clears the Editor when the workspace closes (Req 5.4).
   @override
   void dispose() {
+    // Closing the project with an edit still inside the debounce window: write
+    // it now (fire-and-forget) instead of dropping it with the timer.
+    final bool pending = _autosaveDebouncer.isPending;
     _autosaveDebouncer.dispose();
+    _disposed = true;
+    if (pending) unawaited(_persistActive());
     super.dispose();
   }
+
+  /// Set once [dispose] runs, so a save settling afterwards does not notify.
+  bool _disposed = false;
 }

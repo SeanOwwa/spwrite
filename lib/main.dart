@@ -28,9 +28,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_quill/flutter_quill.dart'
     show FlutterQuillLocalizations;
 import 'package:provider/provider.dart';
+import 'package:provider/single_child_widget.dart' show SingleChildWidget;
 
 import 'package:sqflite_common_ffi/sqflite_ffi.dart' show Database;
 
+import 'app_info.dart';
 import 'data/ai/chunk_embedding_repository.dart';
 import 'data/ai/composite_context_retriever.dart';
 import 'data/ai/connectivity_probe.dart';
@@ -475,19 +477,25 @@ class AppRoot extends StatelessWidget {
         // first shown (Req 9.2). The custom dispose tears down the repository
         // binding before the state itself, so a project switch leaves no
         // listener behind.
-        ListenableProvider<IndexingState>(
-          lazy: false,
-          create: (_) => ai.createIndexingState(activeProject.id),
-          dispose: (_, IndexingState indexing) =>
-              ai.disposeIndexingState(indexing),
-        ),
-        // Reads the IndexingState above to gate the semantic retrieval tier.
-        ChangeNotifierProvider<AiAssistantState>(
-          create: (BuildContext context) => ai.createAssistantState(
-            activeProject.id,
-            context.read<IndexingState>(),
+        //
+        // Both are skipped while the assistant is "coming soon"
+        // (AppInfo.aiAssistantAvailable), so no model download, probe, or
+        // background indexing ever starts.
+        if (AppInfo.aiAssistantAvailable) ...<SingleChildWidget>[
+          ListenableProvider<IndexingState>(
+            lazy: false,
+            create: (_) => ai.createIndexingState(activeProject.id),
+            dispose: (_, IndexingState indexing) =>
+                ai.disposeIndexingState(indexing),
           ),
-        ),
+          // Reads the IndexingState above to gate the semantic retrieval tier.
+          ChangeNotifierProvider<AiAssistantState>(
+            create: (BuildContext context) => ai.createAssistantState(
+              activeProject.id,
+              context.read<IndexingState>(),
+            ),
+          ),
+        ],
       ],
       child: const WorkspaceShell(),
     );
@@ -636,13 +644,25 @@ class _WorkspaceShellState extends State<WorkspaceShell> {
   /// Wide layout: the Project_Sidebar (fixed width) sits beside the Editor. The
   /// [Scaffold] hosts the [ScaffoldMessenger] used by [showErrorSnackBar].
   Widget _buildWideLayout() {
-    return const Scaffold(
+    // Focus mode and Cmd/Ctrl+\ hide the sidebar so the page has the window.
+    final bool showSidebar = context.select<ProjectWorkspaceState, bool>(
+      (ProjectWorkspaceState s) => s.sidebarVisible,
+    );
+    return Scaffold(
       body: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
-          SizedBox(width: _sidebarWidth, child: ProjectSidebarView()),
-          VerticalDivider(width: 1, thickness: 1, color: AppPalette.hairline),
-          Expanded(child: EditorView()),
+          if (showSidebar) ...const <Widget>[
+            SizedBox(width: _sidebarWidth, child: ProjectSidebarView()),
+            VerticalDivider(
+              width: 1,
+              thickness: 1,
+              color: AppPalette.hairline,
+            ),
+          ],
+          // Keyed so the editor (and its unsaved controller state) is kept,
+          // not rebuilt, when the sidebar is added or removed beside it.
+          const Expanded(key: ValueKey<String>('editor'), child: EditorView()),
         ],
       ),
     );

@@ -39,6 +39,13 @@ class AutosaveDebouncer {
     _timer = Timer(duration, callback);
   }
 
+  /// Cancels any pending callback without running it, so the owner can run the
+  /// work immediately instead (e.g. an explicit "save now").
+  void cancel() {
+    _timer?.cancel();
+    _timer = null;
+  }
+
   /// Cancels any pending callback. Called when the owning state is disposed so
   /// no timer outlives it.
   void dispose() {
