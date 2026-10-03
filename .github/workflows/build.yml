@@ -1,17 +1,30 @@
 # Builds Spwrite for macOS, Windows and Linux at the same time on GitHub's
-# machines (each desktop app must be built on its own operating system).
+# machines (each desktop app must be built on its own operating system), then
+# optionally publishes them to the website (SeanOwwa/spwrite.web).
+#
+# The builds match the website's downloads: macOS (Apple Silicon, also runs on
+# Intel), Windows 11 ARM64 and Debian-based Linux ARM64.
 #
 # How to use:
-#   - Any time: GitHub > Actions > "Build desktop apps" > Run workflow.
-#     The three apps appear as downloadable artifacts on the run's page.
-#   - For a release: push a version tag, e.g.
+#   - Build only: GitHub > Actions > "Build desktop apps" > Run workflow.
+#     The three zips appear as artifacts on the run's page.
+#   - Build and update the website: same, but tick "Publish to the website".
+#   - Release: push a version tag, e.g.
 #       git tag v1.3.5 && git push origin v1.3.5
-#     The apps are built and attached to a GitHub Release for that tag.
+#     The apps are attached to a GitHub Release AND published to the website.
+#
+# Publishing needs a repository secret named SPWRITE_WEB_TOKEN: a fine-grained
+# personal access token with "Contents: Read and write" on SeanOwwa/spwrite.web.
 
 name: Build desktop apps
 
 on:
   workflow_dispatch:
+    inputs:
+      publish:
+        description: "Publish to the website (spwrite.web downloads)"
+        type: boolean
+        default: false
   push:
     tags:
       - "v*"
@@ -62,16 +75,18 @@ jobs:
           path: Spwrite-macos.zip
 
   windows:
-    name: Windows app
+    name: Windows app (ARM64)
     needs: test
-    runs-on: windows-latest
+    runs-on: windows-11-arm
     steps:
       - uses: actions/checkout@v4
-      - uses: subosito/flutter-action@v2
-        with:
-          channel: stable
-          flutter-version: ${{ env.FLUTTER_VERSION }}
-          cache: true
+      - name: Install Flutter
+        # Cloned rather than installed with flutter-action, which targets x64.
+        shell: pwsh
+        run: |
+          git clone --depth 1 --branch $env:FLUTTER_VERSION https://github.com/flutter/flutter.git "$env:RUNNER_TEMP\flutter"
+          "$env:RUNNER_TEMP\flutter\bin" | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
+      - run: flutter --version
       - run: flutter pub get
       - run: flutter build windows --release
       - name: Zip the Release folder
@@ -90,9 +105,9 @@ jobs:
           path: Spwrite-windows.zip
 
   linux:
-    name: Linux app
+    name: Linux app (ARM64)
     needs: test
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v4
       - name: Install the Linux build tools
@@ -102,22 +117,26 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y build-essential clang cmake ninja-build \
             pkg-config libgtk-3-dev liblzma-dev libsqlite3-dev \
-            libsecret-1-dev libglu1-mesa
-      - uses: subosito/flutter-action@v2
-        with:
-          channel: stable
-          flutter-version: ${{ env.FLUTTER_VERSION }}
-          cache: true
+            libsecret-1-dev libglu1-mesa zip
+      - name: Install Flutter
+        # Cloned rather than installed with flutter-action, which targets x64.
+        run: |
+          git clone --depth 1 --branch "$FLUTTER_VERSION" https://github.com/flutter/flutter.git "$RUNNER_TEMP/flutter"
+          echo "$RUNNER_TEMP/flutter/bin" >> "$GITHUB_PATH"
+      - run: flutter --version
       - run: flutter pub get
       - run: flutter build linux --release
-      - name: Pack the app folder
-        # The bundle folder is the app: run ./spwrite inside it.
+      - name: Zip the app folder
+        # The bundle folder is the app: run ./spwrite inside it. zip keeps the
+        # executable permission, which unzip restores.
         run: |
-          tar -czf Spwrite-linux-x64.tar.gz -C build/linux/x64/release bundle
+          bundle=$(dirname "$(find build/linux -path '*/release/bundle/spwrite' -type f | head -n 1)")
+          test -n "$bundle" || { echo "spwrite binary not found"; exit 1; }
+          (cd "$(dirname "$bundle")" && zip -qry "$GITHUB_WORKSPACE/Spwrite-linux.zip" bundle)
       - uses: actions/upload-artifact@v4
         with:
           name: Spwrite-linux
-          path: Spwrite-linux-x64.tar.gz
+          path: Spwrite-linux.zip
 
   release:
     name: Attach apps to the GitHub Release
@@ -137,3 +156,48 @@ jobs:
           prerelease: true
           generate_release_notes: true
           files: dist/*
+
+  website:
+    name: Publish to the website
+    if: startsWith(github.ref, 'refs/tags/v') || inputs.publish
+    needs: [macos, windows, linux]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check the website token
+        env:
+          TOKEN: ${{ secrets.SPWRITE_WEB_TOKEN }}
+        run: |
+          if [ -z "$TOKEN" ]; then
+            echo "::error::Add a repository secret SPWRITE_WEB_TOKEN (a fine-grained token with Contents read and write on SeanOwwa/spwrite.web)."
+            exit 1
+          fi
+      - uses: actions/checkout@v4
+        with:
+          path: app
+      - uses: actions/checkout@v4
+        with:
+          repository: SeanOwwa/spwrite.web
+          token: ${{ secrets.SPWRITE_WEB_TOKEN }}
+          path: site
+      - uses: actions/download-artifact@v4
+        with:
+          path: builds
+          merge-multiple: true
+      - name: Copy the builds and update the download pages
+        run: |
+          version=$(sed -nE 's/^version:[[:space:]]*([^+]+).*/\1/p' app/pubspec.yaml)
+          echo "Publishing version $version"
+          python3 app/scripts/publish_website.py --site site --builds builds --version "$version"
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+      - name: Commit and push to spwrite.web
+        working-directory: site
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A downloads update/release.json ./*.html
+          if git diff --cached --quiet; then
+            echo "The website already has these builds."
+            exit 0
+          fi
+          git commit -m "Publish Spwrite Beta v$VERSION downloads"
+          git push
