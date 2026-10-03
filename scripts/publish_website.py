@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 """Publishes fresh Spwrite builds into the website repo (SeanOwwa/spwrite.web).
 
-Run by .github/workflows/build.yml after the three apps are built. Given a
-checkout of the website and a folder holding the three zips, it:
+Run by .github/workflows/build.yml after the apps are built. Given a
+checkout of the website and a folder holding the five zips, it:
 
   1. copies the zips into downloads/ with the site's naming scheme
-     (Spwrite-macOS-v1.3.5.zip, Spwrite-Windows-v1.3.5.zip,
-     Spwrite-Linux-v1.3.5.zip) and deletes the previous version's zips, so the
-     repo does not grow with every release;
+     (Spwrite-macOS-v1.3.5.zip, Spwrite-Windows-v1.3.5.zip and
+     Spwrite-Linux-v1.3.5.zip for ARM64, Spwrite-Windows-x64-v1.3.5.zip and
+     Spwrite-Linux-x64-v1.3.5.zip for x64) and deletes the previous version's
+     zips, so the repo does not grow with every release;
   2. updates each platform in update/release.json (version, date, file, size,
      SHA-256); the site's release.js fills download buttons from it;
   3. replaces the old file names and version label written directly in the
@@ -31,11 +32,16 @@ import shutil
 import sys
 from pathlib import Path
 
-# Site platform key -> (name used in the download file, build zip name).
+# Site platform key -> (name used in the download file, build zip name,
+# architecture label for a newly added entry). The "windows" and "linux" keys
+# keep the site's existing ARM64 downloads and file names; the "-x64" keys are
+# extra entries in update/release.json for x64 download buttons.
 PLATFORMS = {
-    "mac": ("macOS", "Spwrite-macos.zip"),
-    "windows": ("Windows", "Spwrite-windows.zip"),
-    "linux": ("Linux", "Spwrite-linux.zip"),
+    "mac": ("macOS", "Spwrite-macos.zip", "Apple Silicon (ARM64)"),
+    "windows": ("Windows", "Spwrite-windows-arm64.zip", "Windows 11 · ARM64"),
+    "windows-x64": ("Windows-x64", "Spwrite-windows-x64.zip", "Windows 10 and 11 · x64"),
+    "linux": ("Linux", "Spwrite-linux-arm64.zip", "Debian-based · ARM64"),
+    "linux-x64": ("Linux-x64", "Spwrite-linux-x64.zip", "Debian-based · x64"),
 }
 
 # Pages that write the download file name / version label directly.
@@ -67,12 +73,13 @@ def publish(site: Path, builds: Path, version: str, date: str) -> list[str]:
     replacements: dict[str, str] = {}
     summary: list[str] = []
 
-    for key, (os_name, build_name) in PLATFORMS.items():
+    for key, (os_name, build_name, arch) in PLATFORMS.items():
         build = builds / build_name
         if not build.is_file():
             raise SystemExit(f"Missing build: {build}")
         file_name = f"Spwrite-{os_name}-v{version}.zip"
         entry = manifest.setdefault("platforms", {}).setdefault(key, {})
+        entry.setdefault("arch", arch)
         old_file_name = entry.get("fileName")
 
         shutil.copyfile(build, downloads / file_name)

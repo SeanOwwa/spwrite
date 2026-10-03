@@ -2,12 +2,12 @@
 # machines (each desktop app must be built on its own operating system), then
 # optionally publishes them to the website (SeanOwwa/spwrite.web).
 #
-# The builds match the website's downloads: macOS (Apple Silicon, also runs on
-# Intel), Windows 11 ARM64 and Debian-based Linux ARM64.
+# Builds: macOS (Apple Silicon, also runs on Intel), Windows ARM64 and x64,
+# and Debian-based Linux ARM64 and x64.
 #
 # How to use:
 #   - Build only: GitHub > Actions > "Build desktop apps" > Run workflow.
-#     The three zips appear as artifacts on the run's page.
+#     The five zips appear as artifacts on the run's page.
 #   - Build and update the website: same, but tick "Publish to the website".
 #   - Release: push a version tag, e.g.
 #       git tag v1.3.5 && git push origin v1.3.5
@@ -75,13 +75,21 @@ jobs:
           path: Spwrite-macos.zip
 
   windows:
-    name: Windows app (ARM64)
+    name: Windows app (${{ matrix.arch }})
     needs: test
-    runs-on: windows-11-arm
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: arm64
+            runner: windows-11-arm
+          - arch: x64
+            runner: windows-latest
+    runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
       - name: Install Flutter
-        # Cloned rather than installed with flutter-action, which targets x64.
+        # Cloned (rather than flutter-action) so x64 and ARM64 install the same way.
         shell: pwsh
         run: |
           git clone --depth 1 --branch $env:FLUTTER_VERSION https://github.com/flutter/flutter.git "$env:RUNNER_TEMP\flutter"
@@ -98,16 +106,24 @@ jobs:
             Where-Object { Test-Path (Join-Path $_.FullName 'spwrite.exe') } |
             Select-Object -First 1
           if (-not $release) { throw 'spwrite.exe was not found in the build output.' }
-          Compress-Archive -Path "$($release.FullName)\*" -DestinationPath Spwrite-windows.zip
+          Compress-Archive -Path "$($release.FullName)\*" -DestinationPath Spwrite-windows-${{ matrix.arch }}.zip
       - uses: actions/upload-artifact@v4
         with:
-          name: Spwrite-windows
-          path: Spwrite-windows.zip
+          name: Spwrite-windows-${{ matrix.arch }}
+          path: Spwrite-windows-${{ matrix.arch }}.zip
 
   linux:
-    name: Linux app (ARM64)
+    name: Linux app (${{ matrix.arch }})
     needs: test
-    runs-on: ubuntu-24.04-arm
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+          - arch: x64
+            runner: ubuntu-24.04
+    runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
       - name: Install the Linux build tools
@@ -119,7 +135,7 @@ jobs:
             pkg-config libgtk-3-dev liblzma-dev libsqlite3-dev \
             libsecret-1-dev libglu1-mesa zip
       - name: Install Flutter
-        # Cloned rather than installed with flutter-action, which targets x64.
+        # Cloned (rather than flutter-action) so x64 and ARM64 install the same way.
         run: |
           git clone --depth 1 --branch "$FLUTTER_VERSION" https://github.com/flutter/flutter.git "$RUNNER_TEMP/flutter"
           echo "$RUNNER_TEMP/flutter/bin" >> "$GITHUB_PATH"
@@ -132,11 +148,11 @@ jobs:
         run: |
           bundle=$(dirname "$(find build/linux -path '*/release/bundle/spwrite' -type f | head -n 1)")
           test -n "$bundle" || { echo "spwrite binary not found"; exit 1; }
-          (cd "$(dirname "$bundle")" && zip -qry "$GITHUB_WORKSPACE/Spwrite-linux.zip" bundle)
+          (cd "$(dirname "$bundle")" && zip -qry "$GITHUB_WORKSPACE/Spwrite-linux-${{ matrix.arch }}.zip" bundle)
       - uses: actions/upload-artifact@v4
         with:
-          name: Spwrite-linux
-          path: Spwrite-linux.zip
+          name: Spwrite-linux-${{ matrix.arch }}
+          path: Spwrite-linux-${{ matrix.arch }}.zip
 
   release:
     name: Attach apps to the GitHub Release
