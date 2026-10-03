@@ -97,6 +97,29 @@ jobs:
           "$env:RUNNER_TEMP\flutter\bin" | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
       - run: flutter --version
       - run: flutter pub get
+      - name: Build the AI engine with clang on ARM64
+        # llama.cpp (bundled by fllama) refuses MSVC on ARM64 ("MSVC is not
+        # supported for ARM, use clang"), which shows up as "Building native
+        # assets failed". Make sure Visual Studio has its Clang tools, then
+        # patch fllama's build hook to use the ClangCL toolset for Windows
+        # ARM64 only. The rest of the app still builds with MSVC.
+        if: matrix.arch == 'arm64'
+        shell: pwsh
+        run: |
+          $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
+          $vs = & $vswhere -products * -latest -property installationPath
+          $clang = 'Microsoft.VisualStudio.Component.VC.Llvm.Clang'
+          $toolset = 'Microsoft.VisualStudio.Component.VC.Llvm.ClangToolset'
+          $has = & $vswhere -products * -latest -requires $clang $toolset -property installationPath
+          if (-not $has) {
+            Write-Host "Adding Visual Studio's Clang tools to $vs ..."
+            $setup = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\setup.exe'
+            $p = Start-Process -FilePath $setup -Wait -PassThru -ArgumentList @(
+              'modify', '--installPath', "`"$vs`"", '--add', $clang, '--add', $toolset,
+              '--quiet', '--norestart', '--nocache')
+            if ($p.ExitCode -ne 0 -and $p.ExitCode -ne 3010) { throw "Visual Studio Installer failed ($($p.ExitCode))." }
+          }
+          dart run tool/patch_fllama_clangcl.dart
       - run: flutter build windows --release
       - name: Zip the Release folder
         # The whole folder is the app: spwrite.exe needs the files beside it

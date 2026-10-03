@@ -1,20 +1,19 @@
 #!/usr/bin/env bash
 #
-# Spwrite installer for macOS, Linux, and Web.
+# Spwrite installer for macOS and Linux.
 #
 # What it does:
 #   1. Checks for Flutter and everything your computer needs to build Spwrite,
 #      and (with your permission) installs whatever is missing.
 #   2. Enables the target platform in Flutter.
-#   3. Installs the app's packages (`flutter pub get`, plus the SQLite WASM
-#      assets for web).
+#   3. Installs the app's packages (`flutter pub get`).
 #   4. Builds and launches the app -- either immediately in the foreground
 #      (terminal) or detached in the background.
 #
 # Usage:
 #   ./scripts/install.sh [PLATFORM] [MODE] [deps] [check]
 #
-#   PLATFORM : macos | linux | web        (default: web)
+#   PLATFORM : macos | linux              (default: this computer's system)
 #   MODE     : now | background           (default: now)
 #
 #   Extra words (usable in any position):
@@ -30,20 +29,14 @@
 #   What gets installed:
 #     macOS : Homebrew, Xcode Command Line Tools, Git, Flutter
 #             + for macOS apps: full Xcode setup (license / first launch), CocoaPods
-#             + for web (optional): Google Chrome
 #     Linux : apt / dnf / pacman / zypper packages (git, curl, unzip, xz, zip)
 #             + for Linux apps: clang, cmake, ninja, pkg-config, GTK 3, lzma,
 #               libstdc++, SQLite, libsecret and GLU development files
 #             Flutter via snap, or the official stable git checkout in
 #             ~/development/flutter
-#             + for web (optional): Chromium
 #
 # Environment variables:
 #   ASSUME_YES=1   Answer "yes" to every prompt (unattended installs).
-#   WEB_PORT=9000  Port for the web version (default: 8080).
-#   WEB_HOST=0.0.0.0  Address the web version listens on (default: localhost).
-#                  Only change this on a trusted network: the dev server has
-#                  no login. On a remote server, prefer an SSH tunnel instead.
 #
 # Servers without a screen (e.g. Ubuntu Server): the Linux app needs a
 # graphical desktop to open its window. The installer detects this, still
@@ -51,11 +44,11 @@
 # can open Spwrite from your own computer.
 #
 # Examples:
-#   ./scripts/install.sh web now           # build + run web in this terminal
+#   ./scripts/install.sh macos now         # build + run macOS in this terminal
 #   ./scripts/install.sh macos background  # build + run macOS detached
 #   ./scripts/install.sh linux now
 #   ./scripts/install.sh macos deps        # install prerequisites, then run
-#   ./scripts/install.sh deps              # install prerequisites for web, then run
+#   ./scripts/install.sh deps              # install prerequisites for this computer, then run
 #   ./scripts/install.sh macos check       # just report what's missing
 #
 set -euo pipefail
@@ -74,12 +67,15 @@ for arg in "$@"; do
   esac
 done
 
-PLATFORM="${ARGS[0]:-web}"
-MODE="${ARGS[1]:-now}"
-WEB_PORT="${WEB_PORT:-8080}"
-WEB_HOST="${WEB_HOST:-localhost}"
-ASSUME_YES="${ASSUME_YES:-0}"
 HOST_OS="$(uname -s)"
+# Default to the app for this computer: macOS on a Mac, Linux on Linux.
+case "$HOST_OS" in
+  Darwin) DEFAULT_PLATFORM="macos" ;;
+  *)      DEFAULT_PLATFORM="linux" ;;
+esac
+PLATFORM="${ARGS[0]:-$DEFAULT_PLATFORM}"
+MODE="${ARGS[1]:-now}"
+ASSUME_YES="${ASSUME_YES:-0}"
 
 # A Linux machine with no graphical session (Ubuntu Server, SSH without X
 # forwarding, containers) has neither DISPLAY nor WAYLAND_DISPLAY set. The
@@ -128,9 +124,10 @@ confirm() {
 
 # --- Validate the request early -------------------------------------------
 case "$PLATFORM" in
-  macos | linux | web) ;;
+  macos | linux) ;;
   windows) die "Windows builds use the PowerShell installer: .\\scripts\\install.ps1 windows" ;;
-  *) die "Unknown platform '$PLATFORM'. Use: macos | linux | web" ;;
+  web) die "The web version is no longer offered. Build the desktop app instead: ./scripts/install.sh $DEFAULT_PLATFORM" ;;
+  *) die "Unknown platform '$PLATFORM'. Use: macos | linux" ;;
 esac
 case "$MODE" in
   now | background) ;;
@@ -141,10 +138,10 @@ case "$HOST_OS" in
   *) die "This installer supports macOS and Linux. On Windows, use .\\scripts\\install.ps1" ;;
 esac
 if [ "$PLATFORM" = "macos" ] && [ "$HOST_OS" != "Darwin" ]; then
-  die "A macOS app can only be built on a Mac. Try: ./scripts/install.sh linux  (or web)"
+  die "A macOS app can only be built on a Mac. Try: ./scripts/install.sh linux"
 fi
 if [ "$PLATFORM" = "linux" ] && [ "$HOST_OS" != "Linux" ]; then
-  die "A Linux app can only be built on Linux. Try: ./scripts/install.sh macos  (or web)"
+  die "A Linux app can only be built on Linux. Try: ./scripts/install.sh macos"
 fi
 
 # --- PATH helpers -----------------------------------------------------------
@@ -229,17 +226,6 @@ xcode_app_path() {
 xcode_license_ok() { xcodebuild -license check >/dev/null 2>&1; }
 xcode_first_launch_ok() { xcodebuild -checkFirstLaunchStatus >/dev/null 2>&1; }
 
-mac_chrome_path() {
-  if [ -n "${CHROME_EXECUTABLE:-}" ] && [ -x "$CHROME_EXECUTABLE" ]; then
-    printf '%s\n' "$CHROME_EXECUTABLE"; return 0
-  fi
-  local app
-  for app in "/Applications/Google Chrome.app" "$HOME/Applications/Google Chrome.app"; do
-    if [ -d "$app" ]; then printf '%s\n' "$app"; return 0; fi
-  done
-  return 1
-}
-
 check_macos() {
   if have brew; then report_ok "Homebrew" "$(first_line brew --version)"
   else report_optional "Homebrew" "used to install the tools below (https://brew.sh)"; fi
@@ -269,11 +255,6 @@ check_macos() {
     else report_missing "CocoaPods" "brew install cocoapods"; fi
   fi
 
-  if [ "$PLATFORM" = "web" ]; then
-    local chrome
-    if chrome="$(mac_chrome_path)"; then report_ok "Google Chrome" "$chrome"
-    else report_optional "Google Chrome" "brew install --cask google-chrome (any browser works without it)"; fi
-  fi
 }
 
 # --- Linux detection --------------------------------------------------------
@@ -343,19 +324,6 @@ linux_missing_packages() {
   printf '%s\n' "${missing# }"
 }
 
-# Find Chrome or Chromium; Flutter needs CHROME_EXECUTABLE for Chromium.
-linux_chrome_path() {
-  if [ -n "${CHROME_EXECUTABLE:-}" ] && [ -x "$CHROME_EXECUTABLE" ]; then
-    printf '%s\n' "$CHROME_EXECUTABLE"; return 0
-  fi
-  local b
-  for b in google-chrome google-chrome-stable chromium chromium-browser; do
-    if have "$b"; then command -v "$b"; return 0; fi
-  done
-  [ -x /snap/bin/chromium ] && { printf '%s\n' /snap/bin/chromium; return 0; }
-  return 1
-}
-
 check_linux() {
   detect_linux_pm
   if [ -z "$LINUX_PM" ]; then
@@ -372,11 +340,6 @@ check_linux() {
   elif have snap; then report_missing "Flutter" "sudo snap install flutter --classic"
   else report_missing "Flutter" "git clone -b stable $FLUTTER_GIT_URL $FLUTTER_HOME_DEFAULT"; fi
 
-  if [ "$PLATFORM" = "web" ]; then
-    local chrome
-    if chrome="$(linux_chrome_path)"; then report_ok "Chrome / Chromium" "$chrome"
-    else report_optional "Chrome / Chromium" "optional; any browser works without it"; fi
-  fi
 }
 
 run_checks() {
@@ -478,12 +441,6 @@ bootstrap_macos() {
     ensure_cocoapods
   fi
 
-  # 6. Web: Chrome is optional (any browser can open the web-server URL).
-  if [ "$PLATFORM" = "web" ] && ! mac_chrome_path >/dev/null; then
-    if have brew && confirm "Optional: install Google Chrome with 'brew install --cask google-chrome'?"; then
-      brew install --cask google-chrome || warn "Chrome install reported a problem; you can use any browser instead."
-    fi
-  fi
 }
 
 # Make the full Xcode toolchain usable for a macOS build: Xcode.app installed,
@@ -497,7 +454,6 @@ ensure_full_xcode() {
       warn "Building a Mac desktop app needs the full Xcode app, which isn't installed."
       warn "Xcode is free but only comes from the Mac App Store (it can't be installed by script)."
       warn "Install it, open it once, then re-run:  ./scripts/install.sh macos deps"
-      warn "(Tip: the web version doesn't need Xcode:  ./scripts/install.sh web)"
       if confirm "Open Xcode's page in the App Store now?"; then
         open "macappstores://apps.apple.com/app/id497799835" || true
       fi
@@ -587,20 +543,6 @@ bootstrap_linux() {
     have flutter || install_flutter_git || true
   fi
 
-  # Web: Chrome/Chromium is optional; Flutter needs CHROME_EXECUTABLE for Chromium.
-  if [ "$PLATFORM" = "web" ] && [ "$HEADLESS" = "0" ] && ! linux_chrome_path >/dev/null; then
-    if confirm "Optional: install the Chromium browser for the web version?"; then
-      if have snap; then as_root snap install chromium
-      else
-        case "$LINUX_PM" in
-          apt)    as_root apt-get install -y chromium ;;
-          dnf)    as_root dnf install -y chromium ;;
-          pacman) as_root pacman -S --needed --noconfirm chromium ;;
-          zypper) as_root zypper --non-interactive install chromium ;;
-        esac
-      fi || warn "Chromium install reported a problem; you can use any browser instead."
-    fi
-  fi
 }
 
 bootstrap() {
@@ -655,20 +597,10 @@ if ! have flutter; then
 fi
 log "Flutter found: $(flutter_version)"
 
-# On Linux, Flutter only looks for 'google-chrome'; point it at Chromium too.
-if [ "$HOST_OS" = "Linux" ] && [ -z "${CHROME_EXECUTABLE:-}" ] && ! have google-chrome; then
-  if chromium_bin="$(linux_chrome_path)"; then
-    export CHROME_EXECUTABLE="$chromium_bin"
-    log "Using browser: $CHROME_EXECUTABLE"
-    persist_line "export CHROME_EXECUTABLE=\"$CHROME_EXECUTABLE\"" "the browser location"
-  fi
-fi
-
 # --- 2. Enable the target platform ---------------------------------------
 case "$PLATFORM" in
   macos) flutter config --enable-macos-desktop >/dev/null ;;
   linux) flutter config --enable-linux-desktop >/dev/null ;;
-  web)   flutter config --enable-web >/dev/null ;;
 esac
 log "Platform enabled: $PLATFORM"
 
@@ -696,24 +628,17 @@ fi
 log "Installing Dart/Flutter package dependencies..."
 flutter pub get || die "Couldn't download the app's packages. Check your internet connection, then re-run."
 
-if [ "$PLATFORM" = "web" ]; then
-  # Regenerate the SQLite WASM worker + binary the web build needs. Idempotent.
-  log "Setting up SQLite WASM assets for web..."
-  dart run sqflite_common_ffi_web:setup || warn "sqflite web setup reported a non-zero status; existing web/ assets will be used."
-fi
-
 # --- 4. Build ------------------------------------------------------------
 log "Building the app for $PLATFORM (this can take a few minutes on first run)..."
 case "$PLATFORM" in
   macos) flutter build macos ;;
   linux) flutter build linux ;;
-  web)   flutter build web ;;
 esac || die "The build failed. The first error above explains why.
      To see what's missing, run:  ./scripts/install.sh $PLATFORM check"
 log "Build complete."
 
 # Point the user at the finished, standalone artifact so they can double-click
-# it (desktop) or find the hostable bundle (web) without hunting through build/.
+# it without hunting through build/.
 report_artifact() {
   case "$PLATFORM" in
     macos)
@@ -731,11 +656,6 @@ report_artifact() {
       if [ -n "$bundle" ] && [ -d "$bundle" ]; then
         log "Your app is ready: $PROJECT_ROOT/$bundle/spwrite"
         log "Run it directly, or copy the whole 'bundle' folder wherever you like."
-      fi
-      ;;
-    web)
-      if [ -d "build/web" ]; then
-        log "Your hostable web bundle is ready: $PROJECT_ROOT/build/web"
       fi
       ;;
   esac
@@ -785,36 +705,8 @@ if [ "$PLATFORM" = "linux" ] && [ "$HEADLESS" = "1" ]; then
   exit 0
 fi
 
-# Without Chrome, serve the web app and let the user open it in any browser.
-# A screenless server always serves, since it can't open a browser itself.
-WEB_DEVICE="chrome"
-if [ "$PLATFORM" = "web" ]; then
-  if [ "$HEADLESS" = "1" ]; then
-    WEB_DEVICE="web-server"
-  elif { [ "$HOST_OS" = "Darwin" ] && ! mac_chrome_path >/dev/null; } ||
-     { [ "$HOST_OS" = "Linux" ] && ! linux_chrome_path >/dev/null; }; then
-    WEB_DEVICE="web-server"
-    log "Chrome wasn't found, so the app will be served for any browser you like."
-  fi
-fi
-
-# Tells the user how to reach the web version, including from another computer.
-web_hint() {
-  [ "$PLATFORM" = "web" ] || return 0
-  log "Once compiled, open http://localhost:$WEB_PORT"
-  if [ "$HEADLESS" = "1" ] && [ "$WEB_HOST" = "localhost" ]; then
-    log "This server has no screen. To open Spwrite from your own computer, run there:"
-    log "    ssh -L $WEB_PORT:localhost:$WEB_PORT $(id -un)@<this-server-address>"
-    log "  then browse to http://localhost:$WEB_PORT on your computer."
-    log "  (Or start with WEB_HOST=0.0.0.0 to listen on the network -- trusted networks only, there's no login.)"
-  elif [ "$WEB_HOST" != "localhost" ]; then
-    warn "Listening on $WEB_HOST:$WEB_PORT. Anyone who can reach this address can open the app; there's no login."
-  fi
-}
-
 run_cmd() {
   case "$PLATFORM" in
-    web)   flutter run -d "$WEB_DEVICE" --web-hostname "$WEB_HOST" --web-port "$WEB_PORT" ;;
     macos) flutter run -d macos ;;
     linux) flutter run -d linux ;;
   esac
@@ -825,13 +717,11 @@ if [ "$MODE" = "background" ]; then
   log "Launching $PLATFORM in the background. Logs: $LOG_FILE"
   # nohup + & detaches the process from this terminal session. Values are
   # passed through the environment so no quoting can break the inner command.
-  PLATFORM="$PLATFORM" WEB_PORT="$WEB_PORT" WEB_HOST="$WEB_HOST" WEB_DEVICE="$WEB_DEVICE" \
+  PLATFORM="$PLATFORM" \
     nohup bash -c "$(declare -f run_cmd); run_cmd" >"$LOG_FILE" 2>&1 &
   echo $! >"$PROJECT_ROOT/spwrite-$PLATFORM.pid"
   log "Started (PID $(cat "$PROJECT_ROOT/spwrite-$PLATFORM.pid")). Tail logs with: tail -f \"$LOG_FILE\""
-  web_hint
 else
   log "Launching $PLATFORM in this terminal (Ctrl+C to stop)..."
-  web_hint
   run_cmd
 fi

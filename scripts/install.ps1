@@ -1,13 +1,12 @@
 <#
 .SYNOPSIS
-  Spwrite installer for Windows (desktop) and Web.
+  Spwrite installer for the Windows desktop app.
 
 .DESCRIPTION
   1. Checks for Flutter and everything Windows needs to build Spwrite, and
      (with your permission) installs whatever is missing.
   2. Enables the target platform in Flutter.
-  3. Installs the app's packages (flutter pub get, plus the SQLite WASM
-     assets for web).
+  3. Installs the app's packages (flutter pub get).
   4. Builds and launches the app -- immediately in this terminal, or detached
      in the background.
 
@@ -17,13 +16,12 @@
       added to your user PATH)
     - For a Windows app: Visual Studio 2022 Build Tools with the
       "Desktop development with C++" workload (MSVC + Windows SDK)
-    - For web (optional): Google Chrome (Microsoft Edge also works)
   It also checks Windows Developer Mode, which Flutter plugins need for
   symlinks, and offers to open the Settings page to turn it on.
   SQLite needs no install: it is bundled by the sqlite3_flutter_libs package.
 
 .PARAMETER Platform
-  windows | web   (default: web)
+  windows   (default: windows)
 
 .PARAMETER Mode
   now | background   (default: now)
@@ -37,27 +35,25 @@
   Only report what is installed and what is missing, then exit. Changes
   nothing. The bare word 'check' also works.
 
-.PARAMETER WebPort
-  Port for the web version (default: 8080).
 
 .PARAMETER AssumeYes
   Answer "yes" to every confirmation prompt (non-interactive installs).
 
 .EXAMPLE
-  .\scripts\install.ps1 web now
+  .\scripts\install.ps1 windows now
   .\scripts\install.ps1 windows background
   .\scripts\install.ps1 windows -Deps
   .\scripts\install.ps1 deps
   .\scripts\install.ps1 windows check
 #>
 param(
+  # 'web' is accepted only to explain that it is no longer offered.
   [ValidateSet('windows', 'web', 'deps', 'check')]
-  [string]$Platform = 'web',
+  [string]$Platform = 'windows',
 
   [ValidateSet('now', 'background', 'deps', 'check')]
   [string]$Mode = 'now',
 
-  [int]$WebPort = 8080,
 
   [switch]$Deps,
 
@@ -72,8 +68,12 @@ $ErrorActionPreference = 'Stop'
 # normalize the platform/mode back to their real defaults.
 $WantDeps  = [bool]$Deps
 $CheckOnly = [bool]$Check
-if ($Platform -eq 'deps')  { $WantDeps = $true;  $Platform = 'web' }
-if ($Platform -eq 'check') { $CheckOnly = $true; $Platform = 'web' }
+if ($Platform -eq 'deps')  { $WantDeps = $true;  $Platform = 'windows' }
+if ($Platform -eq 'check') { $CheckOnly = $true; $Platform = 'windows' }
+if ($Platform -eq 'web') {
+  Write-Host "[error] The web version is no longer offered. Build the desktop app instead: .\scripts\install.ps1 windows" -ForegroundColor Red
+  exit 1
+}
 if ($Mode -eq 'deps')      { $WantDeps = $true;  $Mode = 'now' }
 if ($Mode -eq 'check')     { $CheckOnly = $true; $Mode = 'now' }
 
@@ -183,6 +183,24 @@ function Get-VsCppInstall {
   return $null
 }
 
+# Whether this PC is Windows on ARM (the build targets ARM64 there).
+$IsArmPc = ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64') -or ($env:PROCESSOR_ARCHITEW6432 -eq 'ARM64')
+
+# Visual Studio's Clang tools. The AI engine (llama.cpp) can't be built with
+# MSVC on ARM64, so ARM PCs need clang-cl and its MSBuild toolset.
+$ClangComponents = @(
+  'Microsoft.VisualStudio.Component.VC.Llvm.Clang',
+  'Microsoft.VisualStudio.Component.VC.Llvm.ClangToolset'
+)
+function Test-VsClang {
+  $vswhere = Get-VsWherePath
+  if (-not $vswhere) { return $false }
+  try {
+    $found = & $vswhere -products * -latest -requires $ClangComponents -property installationPath 2>$null
+    return [bool]($LASTEXITCODE -eq 0 -and $found)
+  } catch { return $false }
+}
+
 # Developer Mode lets non-admin users create the symlinks Flutter plugins use.
 function Test-DeveloperMode {
   try {
@@ -190,23 +208,6 @@ function Test-DeveloperMode {
            -Name AllowDevelopmentWithoutDevLicense -ErrorAction Stop
     return ($v.AllowDevelopmentWithoutDevLicense -eq 1)
   } catch { return $false }
-}
-
-function Get-ChromePath {
-  if ($env:CHROME_EXECUTABLE -and (Test-Path $env:CHROME_EXECUTABLE)) { return $env:CHROME_EXECUTABLE }
-  foreach ($base in @($env:ProgramFiles, ${env:ProgramFiles(x86)}, $env:LOCALAPPDATA)) {
-    if (-not $base) { continue }
-    $p = Join-Path $base 'Google\Chrome\Application\chrome.exe'
-    if (Test-Path $p) { return $p }
-  }
-  return $null
-}
-
-function Test-Edge {
-  foreach ($base in @(${env:ProgramFiles(x86)}, $env:ProgramFiles)) {
-    if ($base -and (Test-Path (Join-Path $base 'Microsoft\Edge\Application\msedge.exe'))) { return $true }
-  }
-  return $false
 }
 
 # SQLite on Windows ships inside the app via the sqlite3_flutter_libs package.
@@ -237,6 +238,10 @@ function Invoke-Checks {
     $vs = Get-VsCppInstall
     if ($vs) { Write-Ok 'Visual Studio C++ tools' $vs }
     else { Write-Missing 'Visual Studio C++ tools' 'Visual Studio 2022 Build Tools, "Desktop development with C++"' }
+    if ($IsArmPc) {
+      if (Test-VsClang) { Write-Ok 'Visual Studio Clang tools' 'installed (needed on ARM64)' }
+      else { Write-Missing 'Visual Studio Clang tools' 'ARM64 needs "C++ Clang Compiler for Windows" and "MSBuild support for LLVM (clang-cl) toolset"' }
+    }
   }
 
   if (Test-DeveloperMode)  { Write-Ok 'Developer Mode' 'on' }
@@ -246,12 +251,6 @@ function Invoke-Checks {
   if (Test-SqliteBundled) { Write-Ok 'SQLite' 'bundled by sqlite3_flutter_libs (nothing to install)' }
   else { Write-Optional 'SQLite' 'sqlite3_flutter_libs not found in pubspec.yaml' }
 
-  if ($Platform -eq 'web') {
-    $chrome = Get-ChromePath
-    if ($chrome) { Write-Ok 'Google Chrome' $chrome }
-    elseif (Test-Edge) { Write-Optional 'Google Chrome' 'not found; Microsoft Edge will be used instead' }
-    else { Write-Optional 'Google Chrome' 'optional; any browser works without it' }
-  }
 }
 
 # --- Install helpers -----------------------------------------------------------
@@ -325,10 +324,26 @@ function Invoke-Bootstrap {
       Write-Step "Visual Studio C++ tools: $vs"
     } elseif (Confirm-Step 'Install Visual Studio 2022 Build Tools with "Desktop development with C++" (large download, several GB)?') {
       $components = '--add Microsoft.VisualStudio.Workload.VCTools --add Microsoft.VisualStudio.Component.VC.Tools.x86.x64 --includeRecommended'
+      if ($IsArmPc) {
+        $components += ' --add Microsoft.VisualStudio.Component.VC.Tools.ARM64'
+        foreach ($c in $ClangComponents) { $components += " --add $c" }
+      }
       Install-Pkg 'Visual Studio Build Tools' 'Microsoft.VisualStudio.2022.BuildTools' 'visualstudio2022buildtools' `
         "--wait --passive --norestart $components" "$components --passive" | Out-Null
       if (-not (Get-VsCppInstall)) {
         Write-Warn "The C++ tools weren't detected yet. If the Visual Studio Installer is still running, let it finish, then re-run."
+      }
+    }
+    if ($IsArmPc -and (Get-VsCppInstall) -and -not (Test-VsClang)) {
+      if (Confirm-Step 'Windows on ARM needs Visual Studio''s Clang tools to build the AI engine. Add them now (needs administrator approval)?') {
+        $vsPath = & (Get-VsWherePath) -products * -latest -property installationPath
+        $setup = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\setup.exe'
+        $argsList = @('modify', '--installPath', "`"$vsPath`"", '--passive', '--norestart')
+        foreach ($c in $ClangComponents) { $argsList += @('--add', $c) }
+        $proc = Start-Process -FilePath $setup -ArgumentList $argsList -Verb RunAs -Wait -PassThru
+        if ($proc.ExitCode -ne 0 -and $proc.ExitCode -ne 3010) {
+          Write-Warn "The Visual Studio Installer reported a problem ($($proc.ExitCode)). Add the Clang tools in the Visual Studio Installer, then re-run."
+        }
       }
     }
   }
@@ -343,12 +358,6 @@ function Invoke-Bootstrap {
     }
   }
 
-  # Chrome (web only, optional; Edge or any browser also works).
-  if ($Platform -eq 'web' -and -not (Get-ChromePath)) {
-    if (Confirm-Step "Optional: install Google Chrome for the web version?") {
-      Install-Pkg 'Google Chrome' 'Google.Chrome' 'googlechrome' $null $null | Out-Null
-    }
-  }
 }
 
 # Copies the built Release folder to a real install location and adds Desktop
@@ -433,7 +442,6 @@ Write-Step ("Flutter found: " + (Get-FirstLine { flutter --version }))
 # --- 2. Enable the target platform ---------------------------------------
 switch ($Platform) {
   'windows' { flutter config --enable-windows-desktop | Out-Null }
-  'web'     { flutter config --enable-web | Out-Null }
 }
 Write-Step "Platform enabled: $Platform"
 
@@ -449,17 +457,32 @@ if ($LASTEXITCODE -ne 0) {
   Stop-WithError "Couldn't download the app's packages. If the message mentions 'symlink', turn on Developer Mode (Settings > System > For developers). Otherwise check your internet connection, then re-run."
 }
 
-if ($Platform -eq 'web') {
-  Write-Step "Setting up SQLite WASM assets for web..."
-  & dart run sqflite_common_ffi_web:setup
-  if ($LASTEXITCODE -ne 0) { Write-Warn "sqflite web setup reported an error; existing web\ assets will be used." }
+
+# On Windows on ARM, the AI engine must be compiled with clang (llama.cpp
+# rejects MSVC on ARM64). Patch fllama's build hook to use ClangCL there.
+if ($IsArmPc) {
+  if (-not (Test-VsClang)) {
+    Write-Warn "Visual Studio's Clang tools are missing, so the build will likely fail on ARM64. Re-run with -Deps to add them."
+  }
+  & dart run tool/patch_fllama_clangcl.dart
+  if ($LASTEXITCODE -ne 0) { Stop-WithError "Couldn't prepare the AI engine build for ARM64 (see the message above)." }
+  # A previous failed attempt leaves a CMake cache configured for MSVC, which
+  # CMake refuses to switch to ClangCL. Clear only those stale caches.
+  $fllamaCache = Join-Path $env:LOCALAPPDATA 'fllama\Cache'
+  if (Test-Path $fllamaCache) {
+    Get-ChildItem -Path $fllamaCache -Recurse -Filter CMakeCache.txt -ErrorAction SilentlyContinue |
+      Where-Object { -not (Select-String -Path $_.FullName -Pattern 'CMAKE_GENERATOR_TOOLSET:INTERNAL=ClangCL' -Quiet) } |
+      ForEach-Object {
+        Write-Step "Clearing a stale AI engine build cache: $($_.DirectoryName)"
+        Remove-Item -Recurse -Force $_.DirectoryName
+      }
+  }
 }
 
 # --- 4. Build ------------------------------------------------------------
 Write-Step "Building the app for $Platform (first run can take a few minutes)..."
 switch ($Platform) {
   'windows' { & flutter build windows }
-  'web'     { & flutter build web }
 }
 if ($LASTEXITCODE -ne 0) {
   Stop-WithError "The build failed. The first error above explains why. To see what's missing, run:  .\scripts\install.ps1 $Platform check"
@@ -477,21 +500,11 @@ switch ($Platform) {
       Install-SpwriteApp $exe.Directory.FullName
     }
   }
-  'web' {
-    if (Test-Path 'build\web') { Write-Step "Your hostable web bundle is ready: $ProjectRoot\build\web" }
-  }
 }
 
 # --- 5. Launch -----------------------------------------------------------
-# Web: Chrome if present, else Edge, else serve for any browser.
-$webDevice = 'chrome'
-if ($Platform -eq 'web' -and -not (Get-ChromePath)) {
-  if (Test-Edge) { $webDevice = 'edge'; Write-Step "Chrome wasn't found, so Microsoft Edge will be used." }
-  else { $webDevice = 'web-server'; Write-Step "Chrome wasn't found, so the app will be served for any browser you like." }
-}
 
 $runArgs = switch ($Platform) {
-  'web'     { @('run', '-d', $webDevice, '--web-port', "$WebPort") }
   'windows' { @('run', '-d', 'windows') }
 }
 
@@ -504,10 +517,8 @@ if ($Mode -eq 'background') {
             -WindowStyle Hidden -PassThru
   $proc.Id | Out-File (Join-Path $ProjectRoot "spwrite-$Platform.pid")
   Write-Step "Started (PID $($proc.Id))."
-  if ($Platform -eq 'web') { Write-Step "Once compiled, open http://localhost:$WebPort" }
 }
 else {
   Write-Step "Launching $Platform in this terminal (Ctrl+C to stop)..."
-  if ($Platform -eq 'web') { Write-Step "Once compiled, open http://localhost:$WebPort" }
   & flutter @runArgs
 }

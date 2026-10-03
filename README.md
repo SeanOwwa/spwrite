@@ -1,6 +1,6 @@
 # Spwrite
 
-**Beta 1.3.5** · macOS, Windows, Linux and web
+**Beta 1.3.5** · macOS, Windows and Linux
 
 Spwrite is a calm writing app for long work: novels, scripts, essays and notes.
 It runs on your own computer, works offline, and keeps your writing private.
@@ -95,7 +95,6 @@ first run takes a few minutes; later runs are quick.
    | --- | --- |
    | Build the Mac app | `./scripts/install.sh macos` |
    | Build the Linux app | `./scripts/install.sh linux` |
-   | Use it in your web browser | `./scripts/install.sh web` |
 
 When it finishes, the installer prints where your app is. Double-click it, or
 drag it to Applications (Mac).
@@ -112,7 +111,6 @@ drag it to Applications (Mac).
    | To… | Run |
    | --- | --- |
    | Build the Windows app | `.\scripts\install.ps1 windows` |
-   | Use it in your web browser | `.\scripts\install.ps1 web` |
 
 If PowerShell won't run the script, paste this first. It only affects the
 current window:
@@ -124,7 +122,7 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 ### Two things to do yourself
 
 - **Mac app:** install **Xcode** from the Mac App Store (free). The installer
-  opens the page for you. The web version doesn't need it.
+  opens the page for you.
 - **Windows app:** turn on **Developer Mode** in Settings > System > For
   developers. The installer opens the page for you.
 
@@ -147,11 +145,9 @@ Add any of these words after the platform, for example
 **Answer "yes" to every prompt:** set `ASSUME_YES=1` on Mac and Linux, or add
 `-AssumeYes` on Windows.
 
-**Change the web port** (default 8080): `WEB_PORT=9000 ./scripts/install.sh web`
-on Mac and Linux, or `.\scripts\install.ps1 web -WebPort 9000` on Windows.
-
-**Stop a background run:** `kill $(cat spwrite-web.pid)` on Mac and Linux, or
-`Stop-Process -Id (Get-Content spwrite-web.pid)` on Windows.
+**Stop a background run:** `kill $(cat spwrite-macos.pid)` (or `spwrite-linux.pid`)
+on Mac and Linux, or `Stop-Process -Id (Get-Content spwrite-windows.pid)` on
+Windows.
 
 **What gets installed** (anything already present is skipped):
 
@@ -193,8 +189,7 @@ Cmd+/ or Ctrl+/ to see this list.
 
 ## Your privacy
 
-- Your projects, documents and characters are stored only on your computer. In
-  the web version they're stored in your browser.
+- Your projects, documents and characters are stored only on your computer.
 - Spwrite has no account and sends your writing nowhere.
 - Exports are saved only where you choose.
 
@@ -239,15 +234,14 @@ Quick reference:
 
 ```bash
 flutter pub get                               # get packages
-dart run sqflite_common_ffi_web:setup         # web only, once
-flutter run -d macos                          # or windows, linux, chrome
+flutter run -d macos                          # or windows, linux
 flutter analyze                               # static checks
 flutter test                                  # run all tests
-flutter build macos --release                 # or windows, linux, web
+flutter build macos --release                 # or windows, linux
 ```
 
-Desktop apps store data in native SQLite; the web version uses SQLite in the
-browser (IndexedDB). The theme lives in `lib/theme/app_theme.dart`.
+Data is stored in a local SQLite database. The theme lives in
+`lib/theme/app_theme.dart`.
 
 The on-device AI assistant is developed on the `ai_feature` branch.
 

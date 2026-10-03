@@ -62,7 +62,7 @@ class DeveloperGuide extends BuiltInGuide {
 const String _start = r'''
 # Developer Guide
 
-Spwrite is a Flutter app for macOS, Windows, Linux and the web. Writing is stored locally in SQLite. There is no server.
+Spwrite is a Flutter desktop app for macOS, Windows and Linux. Writing is stored locally in SQLite. There is no server.
 
 This guide explains how the code is organised and how to change it safely. Read **Architecture** first, then the feature you want to work on.
 
@@ -159,7 +159,7 @@ DatabaseProvider (lib/data/database\_provider.dart) owns the schema. The main ta
 ## Changing the schema
 
 1. Add a helper that creates the table with CREATE TABLE IF NOT EXISTS, or adds a column and ignores the duplicate-column error.
-2. Call it from the fresh-schema path, from onUpgrade behind a version check, and from onOpen. The web database does not reliably run onUpgrade, so onOpen is the safety net.
+2. Call it from the fresh-schema path, from onUpgrade behind a version check, and from onOpen, which acts as a safety net if an upgrade step was missed.
 3. Bump schemaVersion and add a migration test that opens an older database and checks existing data survives.
 
 Always use bound parameters in SQL. Only trusted table and column constants may be written into SQL text.
@@ -244,9 +244,8 @@ const String _build = r'''
 The installer scripts in the scripts folder set up Flutter and build the app. To work by hand:
 
 - Get packages: flutter pub get
-- Web only, once: dart run sqflite\_common\_ffi\_web:setup
-- Run while developing: flutter run -d macos (or windows, linux, chrome)
-- Release build: flutter build macos --release (or windows, linux, web)
+- Run while developing: flutter run -d macos (or windows, linux)
+- Release build: flutter build macos --release (or windows, linux)
 
 A desktop app must be built on its own operating system: the Windows build on Windows, the Linux build on Linux.
 ''';

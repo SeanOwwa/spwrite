@@ -229,7 +229,7 @@ You can export documents as a Word file (.docx) to share, print or send to an ed
 1. Click the download icon at the right of the toolbar.
 2. Tick the documents to include, or use **Select all**.
 3. On the desktop app, check **Save to** and use **Change…** to pick another folder. Spwrite remembers it next time.
-4. Export. When it finishes, use **Show in folder** to find the file. In a web browser the file downloads instead.
+4. Export. When it finishes, use **Show in folder** to find the file.
 
 Each document starts on a new page with its title as a heading, and keeps its bold, italic, headings and lists.
 ''';

@@ -6,8 +6,19 @@ All notable changes to Spwrite are recorded here. The format follows
 
 ## [1.3.5] (Beta) - Unreleased
 
+### Changed
+
+- **The web (browser) version is no longer offered.** Spwrite is now a desktop
+  app for macOS, Windows and Linux. The installers build the app for your
+  computer by default, and `web` explains this instead of building.
+
 ### Fixed
 
+- **The Windows ARM64 build failed** with "Building native assets failed".
+  The AI engine (llama.cpp) can't be compiled with MSVC on ARM64, so it is now
+  built with Visual Studio's Clang tools there. The Windows installer adds
+  those tools on ARM PCs and clears a stale build cache from earlier failed
+  attempts.
 - **Esc didn't leave focus mode while typing.** The editor's own Esc action
   took priority, so Esc only worked when the cursor wasn't in the page. Esc now
   leaves focus mode wherever the cursor is.
