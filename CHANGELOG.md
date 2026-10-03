@@ -4,6 +4,14 @@ All notable changes to Spwrite are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [1.3.5] (Beta) - Unreleased
+
+### Fixed
+
+- **Esc didn't leave focus mode while typing.** The editor's own Esc action
+  took priority, so Esc only worked when the cursor wasn't in the page. Esc now
+  leaves focus mode wherever the cursor is.
+
 ## [1.3.4] (Beta) - Unreleased
 
 ### Added

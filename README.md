@@ -1,6 +1,6 @@
 # Spwrite
 
-**Beta 1.3.4** · macOS, Windows, Linux and web
+**Beta 1.3.5** · macOS, Windows, Linux and web
 
 Spwrite is a calm writing app for long work: novels, scripts, essays and notes.
 It runs on your own computer, works offline, and keeps your writing private.
