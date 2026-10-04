@@ -4,7 +4,7 @@ All notable changes to Spwrite are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses
 [Semantic Versioning](https://semver.org/).
 
-## [1.3.6] (Beta) - 2026-10-03
+## [1.3.6] (Beta) - 2026-10-04
 
 ### Changed
 
@@ -25,12 +25,12 @@ All notable changes to Spwrite are recorded here. The format follows
   grew with the window height, so even short documents could scroll into
   empty space. The page now scrolls only as far as the text and its bottom
   margin.
-- **macOS said "Apple could not verify Spwrite is free of malware" and
-  wouldn't open it.** The Mac build is now signed with a Developer ID,
-  hardened and notarized by Apple, so macOS recognizes it and opens it
-  normally. This needs the Apple signing secrets set up in the build
-  workflow; without them the build is ad-hoc signed and the run warns that it
-  isn't notarized.
+- **Clearer help when macOS says "Apple could not verify Spwrite is free of
+  malware".** The Mac install guide now walks through opening Spwrite the
+  first time with **Open Anyway** (System Settings → Privacy & Security), which
+  replaces the right-click → Open tip that newer macOS versions no longer
+  allow. The build can also sign and notarize the Mac app automatically once
+  an Apple Developer ID is added.
 
 ## [1.3.5] (Beta) - 2026-10-03
 

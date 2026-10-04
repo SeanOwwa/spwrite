@@ -99,15 +99,28 @@ first run takes a few minutes; later runs are quick.
 When it finishes, the installer prints where your app is. Double-click it, or
 drag it to Applications (Mac).
 
-**Mac: "Apple could not verify Spwrite is free of malware".** Downloads from
-the website are signed and notarized by Apple when the release was built with
-the signing secrets (see `.github/workflows/build.yml`), and open normally. If
-you see this message on a build that isn't notarized, open **System Settings →
-Privacy & Security** and click **Open Anyway** next to Spwrite, or run:
+### Opening the downloaded Mac app the first time
+
+The first time you open a Mac download, macOS says *"Apple could not verify
+Spwrite is free of malware."* That's normal: Spwrite is a free beta and isn't
+signed with Apple's paid developer certificate. Many free and open-source Mac
+apps work the same way. You only need to allow it once:
+
+1. Click **Done** on the warning.
+2. Open **System Settings → Privacy & Security** and scroll down to
+   **Security**.
+3. Next to *"Spwrite" was blocked*, click **Open Anyway**.
+4. Enter your Mac password (or use Touch ID) and click **Open Anyway** again.
+
+After that, Spwrite opens with a normal double-click. If you prefer Terminal,
+this does the same thing:
 
 ```bash
 xattr -dr com.apple.quarantine /Applications/Spwrite.app
 ```
+
+An app you build yourself with `./scripts/install.sh macos` never shows this
+warning on your own Mac.
 
 ### Windows
 
